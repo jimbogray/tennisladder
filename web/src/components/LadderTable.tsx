@@ -7,6 +7,7 @@ export function LadderTable({ entries }: { entries: LadderEntryDto[] }) {
         <tr>
           <th>Player</th>
           <th>Points</th>
+          <th>Record</th>
         </tr>
       </thead>
       <tbody>
@@ -16,6 +17,9 @@ export function LadderTable({ entries }: { entries: LadderEntryDto[] }) {
               {entry.firstName} {entry.lastName}
             </td>
             <td>{entry.points}</td>
+            <td>
+              {entry.wins}-{entry.losses}
+            </td>
           </tr>
         ))}
       </tbody>
