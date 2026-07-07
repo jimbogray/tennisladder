@@ -1,0 +1,17 @@
+{
+  "name": "tennisladder",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "api",
+    "web"
+  ],
+  "scripts": {
+    "postinstall": "npm run build --workspace=@tennisladder/shared",
+    "dev:api": "npm run dev --workspace=@tennisladder/api",
+    "dev:web": "npm run dev --workspace=@tennisladder/web",
+    "build": "npm run build --workspace=@tennisladder/shared && npm run build --workspace=@tennisladder/api && npm run build --workspace=@tennisladder/web",
+    "lint": "npm run lint --workspace=@tennisladder/api && npm run lint --workspace=@tennisladder/web"
+  }
+}

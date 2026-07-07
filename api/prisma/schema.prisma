@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PLAYER
+  ADMIN
+}
+
+enum MatchStatus {
+  NEGOTIATING
+  DECLINED
+  SCHEDULED
+  RESULT_PENDING
+  RESULT_DISPUTED
+  COMPLETED
+  CANCELLED
+}
+
+enum MatchEventType {
+  PROPOSED
+  COUNTER_PROPOSED
+  ACCEPTED
+  DECLINED
+  RESULT_SUBMITTED
+  RESULT_CONFIRMED
+  RESULT_DISPUTED
+  ADMIN_OVERRIDE_RESULT
+  ADMIN_CANCELLED
+}
+
+enum ResultOutcome {
+  WON
+  LOST
+}
+
+model User {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String   @unique
+
+  passwordHash String?
+  googleId     String? @unique
+
+  // Nullable: required for Players, left null for coach-admins (ustaRating is a player-only concept).
+  ustaRating Decimal? @db.Decimal(2, 1)
+
+  role UserRole @default(PLAYER)
+
+  // Orthogonal to `role`: false for coach-admins, who need full admin privileges but must never
+  // appear in the ladder, be challenged, or accrue points. Kept as a flag (not a third role value)
+  // so a future "player who opts out of the ladder" case is already covered.
+  participatesInLadder Boolean @default(true)
+
+  points Int @default(0)
+
+  registrationCodeId String?           @unique
+  registrationCode   RegistrationCode? @relation(fields: [registrationCodeId], references: [id])
+
+  emailVerifiedAt    DateTime?
+  profileCompletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  challengedMatches Match[]             @relation("Challenger")
+  opponentMatches   Match[]             @relation("Opponent")
+  matchEvents       MatchEvent[]
+  resultTokens      MatchResultToken[]
+  refreshTokens     RefreshToken[]
+  passwordResets    PasswordResetToken[]
+  pointsAdjustments PointsAdjustment[]  @relation("AdjustedUser")
+  adjustmentsMade   PointsAdjustment[]  @relation("AdjustingAdmin")
+  registrationCodesCreated RegistrationCode[] @relation("RegistrationCodeCreator")
+
+  @@map("users")
+}
+
+model RegistrationCode {
+  id               String  @id @default(cuid())
+  code             String
+  createdByAdminId String
+  createdByAdmin   User    @relation("RegistrationCodeCreator", fields: [createdByAdminId], references: [id])
+  intendedForNote  String?
+
+  usedAt    DateTime?
+  usedByUser User?
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  // Active-code uniqueness (used_at IS NULL) is enforced by a hand-added partial unique index
+  // in a migration — see prisma/migrations/*_registration_code_active_unique/migration.sql.
+  // Prisma schema syntax has no WHERE clause support for @@unique.
+
+  @@map("registration_codes")
+}
+
+model Location {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  matches Match[]
+
+  @@map("locations")
+}
+
+model Match {
+  id String @id @default(cuid())
+
+  challengerId String
+  challenger   User   @relation("Challenger", fields: [challengerId], references: [id])
+  opponentId   String
+  opponent     User   @relation("Opponent", fields: [opponentId], references: [id])
+
+  status MatchStatus @default(NEGOTIATING)
+
+  proposedDateTime   DateTime
+  proposedLocationId String
+  proposedLocation   Location @relation(fields: [proposedLocationId], references: [id])
+  proposedComment    String?
+
+  awaitingResponseFromUserId String
+  lastActionAt               DateTime @default(now())
+
+  scheduledDateTime DateTime?
+
+  resultReportedByUserId String?
+  winnerId               String?
+  loserId                String?
+  pointsAwarded          Int?
+  resultConfirmedAt      DateTime?
+  isAdminOverride        Boolean   @default(false)
+
+  reminderSentAt            DateTime?
+  staleResultReminderSentAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events       MatchEvent[]
+  resultTokens MatchResultToken[]
+
+  @@index([status])
+  @@map("matches")
+}
+
+model MatchEvent {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id])
+
+  type        MatchEventType
+  actorUserId String?
+  actor       User?          @relation(fields: [actorUserId], references: [id])
+
+  // Negotiation-event snapshot fields
+  snapshotDateTime   DateTime?
+  snapshotLocationId String?
+  comment            String?
+
+  // Result-event field
+  resultOutcome ResultOutcome?
+
+  createdAt DateTime @default(now())
+
+  @@index([matchId, createdAt])
+  @@map("match_events")
+}
+
+model MatchResultToken {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id])
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  outcome ResultOutcome
+  token   String        @unique
+
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, userId, outcome])
+  @@map("match_result_tokens")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("password_reset_tokens")
+}
+
+model PointsAdjustment {
+  id                String @id @default(cuid())
+  userId            String
+  user              User   @relation("AdjustedUser", fields: [userId], references: [id])
+  adjustedByAdminId String
+  adjustedByAdmin   User   @relation("AdjustingAdmin", fields: [adjustedByAdminId], references: [id])
+
+  previousPoints Int
+  newPoints      Int
+  reason         String?
+
+  createdAt DateTime @default(now())
+
+  @@map("points_adjustments")
+}
