@@ -25,6 +25,8 @@ export interface LadderEntryDto {
   firstName: string;
   lastName: string;
   points: number;
+  wins: number;
+  losses: number;
 }
 
 export interface LocationDto {

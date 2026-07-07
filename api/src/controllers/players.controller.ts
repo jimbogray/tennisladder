@@ -8,7 +8,32 @@ export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
     orderBy: { points: "desc" },
     select: { id: true, firstName: true, lastName: true, points: true },
   });
-  res.json(players);
+
+  const [wins, losses] = await Promise.all([
+    prisma.match.groupBy({
+      by: ["winnerId"],
+      where: { status: "COMPLETED" },
+      _count: { _all: true },
+    }),
+    prisma.match.groupBy({
+      by: ["loserId"],
+      where: { status: "COMPLETED" },
+      _count: { _all: true },
+    }),
+  ]);
+  const winsByUserId = new Map(wins.map((w) => [w.winnerId, w._count._all]));
+  const lossesByUserId = new Map(losses.map((l) => [l.loserId, l._count._all]));
+
+  res.json(
+    players.map((player) => ({
+      userId: player.id,
+      firstName: player.firstName,
+      lastName: player.lastName,
+      points: player.points,
+      wins: winsByUserId.get(player.id) ?? 0,
+      losses: lossesByUserId.get(player.id) ?? 0,
+    })),
+  );
 });
 
 export const listChallengeable = asyncHandler(async (req: Request, res: Response) => {
