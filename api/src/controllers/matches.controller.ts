@@ -59,14 +59,22 @@ const proposeSchema = z.object({
 
 export const proposeMatch = asyncHandler(async (req: Request, res: Response) => {
   const body = proposeSchema.parse(req.body);
-  const match = await matchService.proposeMatch({
-    challengerId: req.user!.id,
-    opponentId: body.opponentId,
-    proposedDateTime: new Date(body.proposedDateTime),
-    proposedLocationId: body.proposedLocationId,
-    proposedComment: body.proposedComment,
-  });
-  res.status(201).json(match);
+  try {
+    const match = await matchService.proposeMatch({
+      challengerId: req.user!.id,
+      opponentId: body.opponentId,
+      proposedDateTime: new Date(body.proposedDateTime),
+      proposedLocationId: body.proposedLocationId,
+      proposedComment: body.proposedComment,
+    });
+    res.status(201).json(match);
+  } catch (err) {
+    if (err instanceof matchService.MatchValidationError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 });
 
 const counterSchema = z.object({

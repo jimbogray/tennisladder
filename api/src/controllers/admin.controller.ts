@@ -25,3 +25,21 @@ export const listRegistrationCodes = asyncHandler(async (_req: Request, res: Res
     })),
   );
 });
+
+export const expireRegistrationCode = asyncHandler(async (req: Request, res: Response) => {
+  const now = new Date();
+  // Only active (unused, not-yet-expired) codes can be manually expired; expiring is done by
+  // pulling expiresAt back to now. A used code is a no-op target and returns 409.
+  const { count } = await prisma.registrationCode.updateMany({
+    where: { id: req.params.id, usedAt: null, expiresAt: { gt: now } },
+    data: { expiresAt: now },
+  });
+
+  if (count === 0) {
+    res.status(409).json({ message: "Code is not active and cannot be expired." });
+    return;
+  }
+
+  const code = await prisma.registrationCode.findUnique({ where: { id: req.params.id } });
+  res.json({ ...code, isActive: false });
+});

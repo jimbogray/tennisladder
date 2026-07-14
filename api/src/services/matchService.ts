@@ -1,4 +1,8 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma, MatchEventType, MatchStatus } from "@prisma/client";
+import { prisma } from "../config/prisma.js";
+
+/** Thrown for invalid match actions (bad turn, self-challenge, etc.). Callers surface as a 400. */
+export class MatchValidationError extends Error {}
 
 export interface ProposeMatchInput {
   challengerId: string;
@@ -9,9 +13,54 @@ export interface ProposeMatchInput {
 }
 
 export async function proposeMatch(input: ProposeMatchInput) {
-  // TODO: reject if challenger or opponent has participatesInLadder=false (coach-admins),
-  // and reject self-challenge. See docs/architecture.md API Endpoints > Matches.
-  throw new Error("Not implemented");
+  if (input.challengerId === input.opponentId) {
+    throw new MatchValidationError("You can't challenge yourself");
+  }
+
+  const opponent = await prisma.user.findUnique({ where: { id: input.opponentId } });
+  if (!opponent) {
+    throw new MatchValidationError("Opponent not found");
+  }
+  // Coach-admins are on the roster but never participate in the ladder, so they can't be
+  // challenged. (The challenger's own participation is already enforced by requireLadderParticipant.)
+  if (!opponent.participatesInLadder) {
+    throw new MatchValidationError("That player can't be challenged");
+  }
+
+  const location = await prisma.location.findUnique({ where: { id: input.proposedLocationId } });
+  if (!location) {
+    throw new MatchValidationError("Location not found");
+  }
+
+  // The opponent must respond first, so the turn starts with them. Record the opening PROPOSED
+  // event in the same transaction as the Match so a challenge always has its negotiation history.
+  return prisma.$transaction(async (tx) => {
+    const match = await tx.match.create({
+      data: {
+        challengerId: input.challengerId,
+        opponentId: input.opponentId,
+        status: MatchStatus.NEGOTIATING,
+        proposedDateTime: input.proposedDateTime,
+        proposedLocationId: input.proposedLocationId,
+        proposedComment: input.proposedComment,
+        awaitingResponseFromUserId: input.opponentId,
+      },
+      include: { challenger: true, opponent: true, proposedLocation: true },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId: match.id,
+        type: MatchEventType.PROPOSED,
+        actorUserId: input.challengerId,
+        snapshotDateTime: input.proposedDateTime,
+        snapshotLocationId: input.proposedLocationId,
+        comment: input.proposedComment,
+      },
+    });
+
+    return match;
+  });
 }
 
 export async function counterPropose(matchId: string, actingUserId: string, input: {

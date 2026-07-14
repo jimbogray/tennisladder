@@ -32,8 +32,27 @@ export async function generateRegistrationCode(createdByAdminId: string, intende
   throw new Error("Failed to generate a unique registration code");
 }
 
+/** Thrown when a registration code can't be redeemed. Callers should surface this as a 400. */
+export class RegistrationCodeError extends Error {}
+
+/**
+ * Atomically redeems an active registration code: looks it up by value (usedAt IS NULL), verifies
+ * it hasn't expired, marks it used, and returns it. Throws {@link RegistrationCodeError} otherwise.
+ */
 export async function redeemRegistrationCode(code: string) {
-  // TODO: inside a transaction, look up an active (usedAt IS NULL) code by value, verify
-  // expiresAt > now(), mark usedAt, and return it for use in registration. Reject otherwise.
-  throw new Error("Not implemented");
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.registrationCode.findFirst({
+      where: { code, usedAt: null },
+    });
+    if (!existing) {
+      throw new RegistrationCodeError("Invalid or already-used registration code");
+    }
+    if (existing.expiresAt <= new Date()) {
+      throw new RegistrationCodeError("Registration code has expired");
+    }
+    return tx.registrationCode.update({
+      where: { id: existing.id },
+      data: { usedAt: new Date() },
+    });
+  });
 }

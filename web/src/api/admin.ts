@@ -20,3 +20,9 @@ export function createRegistrationCode(intendedForNote?: string) {
     body: JSON.stringify({ intendedForNote }),
   });
 }
+
+export function expireRegistrationCode(id: string) {
+  return apiFetch<RegistrationCodeDto>(`/admin/registration-codes/${id}/expire`, {
+    method: "POST",
+  });
+}
