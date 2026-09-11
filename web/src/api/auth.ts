@@ -33,6 +33,12 @@ export function fetchSession() {
   return apiFetch<{ user: SessionUserDto | null }>("/auth/session");
 }
 
+export function refreshSession() {
+  return apiFetch<{ user: SessionUserDto; accessToken: string }>("/auth/refresh", {
+    method: "POST",
+  });
+}
+
 export function logout() {
   return apiFetch<void>("/auth/logout", { method: "POST" });
 }

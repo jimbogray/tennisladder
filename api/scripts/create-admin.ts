@@ -4,8 +4,8 @@ import { hashPassword } from "../src/auth/passwordUtils.js";
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = "jimbogray@gmail.com";
-  const passwordHash = await hashPassword("pass123");
+  const email = "james@example.com";
+  const passwordHash = await hashPassword("123");
 
   const user = await prisma.user.upsert({
     where: { email },
@@ -17,8 +17,8 @@ async function main() {
       profileCompletedAt: new Date(),
     },
     create: {
-      firstName: "Admin",
-      lastName: "User",
+      firstName: "James",
+      lastName: "Gray",
       email,
       passwordHash,
       role: "ADMIN",
