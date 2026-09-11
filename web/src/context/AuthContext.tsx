@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState, type ReactNode } from "react";
 import type { SessionUserDto } from "@tennisladder/shared";
-import { fetchSession, logout as logoutRequest } from "../api/auth.js";
+import { logout as logoutRequest, refreshSession } from "../api/auth.js";
 import { setAccessToken } from "../api/client.js";
 
 export interface AuthContextValue {
@@ -17,11 +17,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: on mount, call POST /api/auth/refresh first to mint an access token from the
-    // httpOnly refresh cookie, then GET /api/auth/session. Wired as a single session fetch
-    // for now since refresh isn't implemented yet.
-    fetchSession()
-      .then((res) => setUser(res.user))
+    // Mint a fresh access token from the httpOnly refresh cookie on load, since the access
+    // token itself only ever lives in memory and is lost on a full page reload.
+    refreshSession()
+      .then((res) => {
+        setAccessToken(res.accessToken);
+        setUser(res.user);
+      })
       .catch(() => setUser(null))
       .finally(() => setIsLoading(false));
   }, []);

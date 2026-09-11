@@ -5,7 +5,7 @@ import type { SessionUserDto } from "@tennisladder/shared";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { hashPassword, verifyPassword } from "../auth/passwordUtils.js";
-import { signAccessToken, signRefreshToken } from "../auth/authConfig.js";
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../auth/authConfig.js";
 import { hashToken } from "../services/tokenService.js";
 import { redeemRegistrationCode, RegistrationCodeError } from "../services/registrationCodeService.js";
 import { env } from "../config/env.js";
@@ -27,6 +27,13 @@ function toSessionUserDto(user: SessionUser): SessionUserDto {
   };
 }
 
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/api/auth",
+};
+
 async function issueSession(res: Response, user: SessionUser) {
   const accessToken = signAccessToken({
     sub: user.id,
@@ -44,9 +51,7 @@ async function issueSession(res: Response, user: SessionUser) {
   });
 
   res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    ...refreshCookieOptions,
     maxAge: env.jwtRefreshTtlDays * 24 * 60 * 60 * 1000,
   });
 
@@ -133,14 +138,59 @@ export const completeProfile = asyncHandler(async (_req: Request, res: Response)
   res.status(501).json({ error: "Not implemented" });
 });
 
-export const refresh = asyncHandler(async (_req: Request, res: Response) => {
-  // TODO: verify refresh cookie, rotate it, issue a new access token.
-  res.status(501).json({ error: "Not implemented" });
+export const refresh = asyncHandler(async (req: Request, res: Response) => {
+  const refreshToken = req.cookies?.refreshToken as string | undefined;
+  if (!refreshToken) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  let payload: { sub: string };
+  try {
+    payload = verifyRefreshToken(refreshToken);
+  } catch {
+    res.clearCookie("refreshToken", refreshCookieOptions);
+    res.status(401).json({ error: "Invalid or expired session" });
+    return;
+  }
+
+  const tokenHash = hashToken(refreshToken);
+  const stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+  if (!stored || stored.revokedAt || stored.expiresAt < new Date() || stored.userId !== payload.sub) {
+    res.clearCookie("refreshToken", refreshCookieOptions);
+    res.status(401).json({ error: "Invalid or expired session" });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!user) {
+    res.clearCookie("refreshToken", refreshCookieOptions);
+    res.status(401).json({ error: "Invalid or expired session" });
+    return;
+  }
+
+  // Not rotated: the refresh token stays valid until its own expiry so that concurrent
+  // refresh calls (e.g. React StrictMode's double effect invocation in dev) don't race each
+  // other into invalidating a token the other call still needs.
+  const accessToken = signAccessToken({
+    sub: user.id,
+    role: user.role,
+    participatesInLadder: user.participatesInLadder,
+  });
+  res.json({ user: toSessionUserDto(user), accessToken });
 });
 
-export const logout = asyncHandler(async (_req: Request, res: Response) => {
-  // TODO: revoke the refresh token, clear the cookie.
-  res.status(501).json({ error: "Not implemented" });
+export const logout = asyncHandler(async (req: Request, res: Response) => {
+  const refreshToken = req.cookies?.refreshToken as string | undefined;
+  if (refreshToken) {
+    await prisma.refreshToken.updateMany({
+      where: { tokenHash: hashToken(refreshToken), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  res.clearCookie("refreshToken", refreshCookieOptions);
+  res.status(204).send();
 });
 
 export const session = asyncHandler(async (req: Request, res: Response) => {

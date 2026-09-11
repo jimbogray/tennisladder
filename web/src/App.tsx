@@ -4,7 +4,7 @@ import { RequireAdmin } from "./components/RequireAdmin.js";
 import { Layout } from "./components/Layout.js";
 import { LandingPage } from "./pages/LandingPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
-import { SignupPage } from "./pages/SignupPage.js";
+import { RegisterPage } from "./pages/RegisterPage.js";
 import { CompleteProfilePage } from "./pages/CompleteProfilePage.js";
 import { LadderPage } from "./pages/LadderPage.js";
 import { MatchesPage } from "./pages/MatchesPage.js";
@@ -25,7 +25,7 @@ export function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/register" element={<RegisterPage />} />
       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
       <Route path="/results/confirm/:token" element={<ResultConfirmPage />} />

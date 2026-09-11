@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { UserRole } from "@prisma/client";
 import { env } from "../config/env.js";
@@ -19,7 +20,10 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
 }
 
 export function signRefreshToken(userId: string): string {
-  return jwt.sign({ sub: userId }, env.jwtRefreshSecret, {
+  // jti makes each token unique even when issued for the same user within the same second
+  // (e.g. a double-submitted login), which would otherwise produce byte-identical JWTs and
+  // collide on the refresh_tokens.tokenHash unique constraint.
+  return jwt.sign({ sub: userId, jti: randomUUID() }, env.jwtRefreshSecret, {
     expiresIn: `${env.jwtRefreshTtlDays}d`,
   });
 }

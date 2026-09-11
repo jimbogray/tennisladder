@@ -11,16 +11,19 @@ export function NavBar() {
   }
 
   return (
-    <nav>
-      <NavLink to="/ladder">Ladder</NavLink>
-      <NavLink to="/matches">Matches</NavLink>
-      <NavLink to="/locations">Locations</NavLink>
-      {user?.role === "ADMIN" && (
-        <NavLink to="/admin/registration-codes">Registration Codes</NavLink>
-      )}
-      <button type="button" onClick={() => handleLogout()}>
-        Log out
-      </button>
+    <nav className="navbar">
+      <span className="navbar-brand">Tennis Ladder</span>
+      <div className="navbar-links">
+        <NavLink to="/ladder">Ladder</NavLink>
+        <NavLink to="/matches">Matches</NavLink>
+        <NavLink to="/locations">Locations</NavLink>
+        {user?.role === "ADMIN" && (
+          <NavLink to="/admin/registration-codes">Registration Codes</NavLink>
+        )}
+        <button type="button" className="navbar-logout" onClick={() => handleLogout()}>
+          Log out
+        </button>
+      </div>
     </nav>
   );
 }

@@ -8,11 +8,13 @@ export function LandingPage() {
   if (user) return <Navigate to="/ladder" replace />;
 
   return (
-    <div>
+    <div className="auth-page">
       <h1>Tennis Ladder</h1>
-      <p>Log in or sign up to view the ladder.</p>
-      <Link to="/login">Log in</Link>
-      <Link to="/signup">Sign up</Link>
+      <p>Log in or register to view the ladder.</p>
+      <div className="auth-links">
+        <Link to="/login">Log in</Link>
+        <Link to="/register">Register</Link>
+      </div>
     </div>
   );
 }

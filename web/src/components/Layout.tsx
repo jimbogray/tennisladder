@@ -3,9 +3,9 @@ import { NavBar } from "./NavBar.js";
 
 export function Layout() {
   return (
-    <div>
+    <div className="app-shell">
       <NavBar />
-      <main>
+      <main className="page-content">
         <Outlet />
       </main>
     </div>
