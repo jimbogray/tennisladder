@@ -11,9 +11,11 @@ matchesRouter.get("/:id", requireAuth, matches.getMatch);
 // Proposing/responding to challenges requires ladder participation — coach-admins are
 // excluded even though they otherwise have full admin rights (see participatesInLadder on User).
 matchesRouter.post("/", requireAuth, requireLadderParticipant, matches.proposeMatch);
+matchesRouter.post("/:id/amend", requireAuth, requireLadderParticipant, matches.amendProposal);
 matchesRouter.post("/:id/counter", requireAuth, requireLadderParticipant, matches.counterPropose);
 matchesRouter.post("/:id/accept", requireAuth, requireLadderParticipant, matches.acceptMatch);
 matchesRouter.post("/:id/decline", requireAuth, requireLadderParticipant, matches.declineMatch);
+matchesRouter.post("/:id/cancel", requireAuth, requireLadderParticipant, matches.cancelMatch);
 matchesRouter.post("/:id/result", requireAuth, requireLadderParticipant, matches.submitResult);
 
 export const adminMatchesRouter = Router();

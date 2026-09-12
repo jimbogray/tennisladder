@@ -3,6 +3,9 @@ import { z } from "zod";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { generateRegistrationCode } from "../services/registrationCodeService.js";
+import { sendEmail } from "../services/emailService.js";
+import { renderInviteEmail } from "../emails/templates/invite.js";
+import { env } from "../config/env.js";
 
 const createCodeSchema = z.object({ intendedForNote: z.string().optional() });
 
@@ -10,6 +13,35 @@ export const createRegistrationCode = asyncHandler(async (req: Request, res: Res
   const { intendedForNote } = createCodeSchema.parse(req.body ?? {});
   const code = await generateRegistrationCode(req.user!.id, intendedForNote);
   res.status(201).json(code);
+});
+
+const inviteSchema = z.object({ email: z.string().email("Enter a valid email address") });
+
+/**
+ * Issues a registration code and emails it as a one-click invite link. The code is created first
+ * and kept even if the send fails, so an admin can fall back to reading the code out manually.
+ */
+export const inviteByEmail = asyncHandler(async (req: Request, res: Response) => {
+  const { email } = inviteSchema.parse(req.body);
+  const invitedEmail = email.trim().toLowerCase();
+
+  const existingUser = await prisma.user.findUnique({ where: { email: invitedEmail } });
+  if (existingUser) {
+    res.status(409).json({ error: "That email address already has an account" });
+    return;
+  }
+
+  const code = await generateRegistrationCode(req.user!.id, undefined, invitedEmail);
+
+  const registerUrl = `${env.webAppUrl}/register?code=${encodeURIComponent(code.code)}`;
+  const { subject, html } = renderInviteEmail({
+    registerUrl,
+    code: code.code,
+    expiresAt: code.expiresAt,
+  });
+  await sendEmail({ to: invitedEmail, subject, html });
+
+  res.status(201).json({ ...code, isActive: true });
 });
 
 export const listRegistrationCodes = asyncHandler(async (_req: Request, res: Response) => {

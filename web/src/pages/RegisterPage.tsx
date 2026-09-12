@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { register } from "../api/auth.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { ApiError } from "../api/client.js";
@@ -8,13 +8,15 @@ import { ApiError } from "../api/client.js";
 const USTA_RATINGS = Array.from({ length: 10 }, (_, i) => (2.5 + i * 0.5).toFixed(1));
 
 export function RegisterPage() {
+  // Invite emails link here as /register?code=1234 so the recipient doesn't have to type it.
+  const [searchParams] = useSearchParams();
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
     email: "",
     password: "",
     ustaRating: "",
-    registrationCode: "",
+    registrationCode: (searchParams.get("code") ?? "").replace(/\D/g, "").slice(0, 4),
   });
   const [error, setError] = useState<string | null>(null);
   const { setSession } = useAuth();
@@ -75,6 +77,9 @@ export function RegisterPage() {
           <small id="registration-code-hint">4-digit code from your club admin.</small>
           <button type="submit">Register</button>
           {/* TODO: "Continue with Google" button linking to GET /api/auth/google */}
+          <p>
+            Already have an account? <Link to="/login">Log in</Link>
+          </p>
         </form>
       </div>
     </div>

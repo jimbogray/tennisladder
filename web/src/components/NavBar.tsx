@@ -18,7 +18,7 @@ export function NavBar() {
         <NavLink to="/matches">Matches</NavLink>
         <NavLink to="/locations">Locations</NavLink>
         {user?.role === "ADMIN" && (
-          <NavLink to="/admin/registration-codes">Registration Codes</NavLink>
+          <NavLink to="/admin/invites">Invites</NavLink>
         )}
         <button type="button" className="navbar-logout" onClick={() => handleLogout()}>
           Log out
