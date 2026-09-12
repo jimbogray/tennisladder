@@ -25,9 +25,13 @@ enum MatchStatus {
 
 enum MatchEventType {
   PROPOSED
+  // The proposing side changed its own still-standing offer; the turn does not move.
+  AMENDED
   COUNTER_PROPOSED
   ACCEPTED
   DECLINED
+  // Either player called off an already-scheduled match (ADMIN_CANCELLED is the admin equivalent).
+  CANCELLED
   RESULT_SUBMITTED
   RESULT_CONFIRMED
   RESULT_DISPUTED
@@ -89,6 +93,8 @@ model RegistrationCode {
   createdByAdminId String
   createdByAdmin   User    @relation("RegistrationCodeCreator", fields: [createdByAdminId], references: [id])
   intendedForNote  String?
+  // Set when the code was issued by emailing an invite, rather than generated for manual handout.
+  invitedEmail     String?
 
   usedAt    DateTime?
   usedByUser User?

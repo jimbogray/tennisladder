@@ -5,6 +5,7 @@ import * as admin from "../controllers/admin.controller.js";
 export const adminRegistrationCodesRouter = Router();
 adminRegistrationCodesRouter.post("/", requireAuth, requireAdmin, admin.createRegistrationCode);
 adminRegistrationCodesRouter.get("/", requireAuth, requireAdmin, admin.listRegistrationCodes);
+adminRegistrationCodesRouter.post("/invite", requireAuth, requireAdmin, admin.inviteByEmail);
 adminRegistrationCodesRouter.post(
   "/:id/expire",
   requireAuth,

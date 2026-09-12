@@ -63,25 +63,209 @@ export async function proposeMatch(input: ProposeMatchInput) {
   });
 }
 
-export async function counterPropose(matchId: string, actingUserId: string, input: {
+/** Loads a match and checks the acting user is one of its two players. */
+async function loadForParticipant(matchId: string, actingUserId: string) {
+  const match = await prisma.match.findUnique({ where: { id: matchId } });
+  if (!match) {
+    throw new MatchValidationError("Match not found");
+  }
+  if (match.challengerId !== actingUserId && match.opponentId !== actingUserId) {
+    throw new MatchValidationError("You're not a player in this match");
+  }
+  return match;
+}
+
+function otherPlayer(match: { challengerId: string; opponentId: string }, userId: string) {
+  return match.challengerId === userId ? match.opponentId : match.challengerId;
+}
+
+export interface ProposalInput {
   proposedDateTime: Date;
   proposedLocationId: string;
   proposedComment?: string;
-}) {
-  // TODO: verify actingUserId === match.awaitingResponseFromUserId, flip the turn,
-  // write a COUNTER_PROPOSED MatchEvent, update Match.proposed* fields.
-  throw new Error("Not implemented");
 }
 
+async function assertLocationExists(locationId: string) {
+  const location = await prisma.location.findUnique({ where: { id: locationId } });
+  if (!location) {
+    throw new MatchValidationError("Location not found");
+  }
+}
+
+/**
+ * Revises an offer that is still awaiting the *other* player's response — i.e. the side that made
+ * the current proposal changing its mind before it's answered. The turn deliberately does not move:
+ * the other player still owes the reply.
+ */
+export async function amendProposal(matchId: string, actingUserId: string, input: ProposalInput) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.NEGOTIATING) {
+    throw new MatchValidationError("This match is no longer under negotiation");
+  }
+  if (match.awaitingResponseFromUserId === actingUserId) {
+    throw new MatchValidationError("It's your turn to respond — accept, counter or decline instead");
+  }
+  await assertLocationExists(input.proposedLocationId);
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: {
+        proposedDateTime: input.proposedDateTime,
+        proposedLocationId: input.proposedLocationId,
+        proposedComment: input.proposedComment,
+        lastActionAt: new Date(),
+      },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId,
+        type: MatchEventType.AMENDED,
+        actorUserId: actingUserId,
+        snapshotDateTime: input.proposedDateTime,
+        snapshotLocationId: input.proposedLocationId,
+        comment: input.proposedComment,
+      },
+    });
+
+    return updated;
+  });
+}
+
+/**
+ * Answers an offer with a different date/location, handing the turn back to the other player.
+ * Loops indefinitely — there's no cap on rounds of negotiation.
+ */
+export async function counterPropose(matchId: string, actingUserId: string, input: ProposalInput) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.NEGOTIATING) {
+    throw new MatchValidationError("This match is no longer under negotiation");
+  }
+  if (match.awaitingResponseFromUserId !== actingUserId) {
+    throw new MatchValidationError("You've already responded — it's the other player's turn");
+  }
+  await assertLocationExists(input.proposedLocationId);
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: {
+        proposedDateTime: input.proposedDateTime,
+        proposedLocationId: input.proposedLocationId,
+        proposedComment: input.proposedComment,
+        awaitingResponseFromUserId: otherPlayer(match, actingUserId),
+        lastActionAt: new Date(),
+      },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId,
+        type: MatchEventType.COUNTER_PROPOSED,
+        actorUserId: actingUserId,
+        snapshotDateTime: input.proposedDateTime,
+        snapshotLocationId: input.proposedLocationId,
+        comment: input.proposedComment,
+      },
+    });
+
+    return updated;
+  });
+}
+
+/**
+ * Locks in the standing offer. Only the player who owes a reply can accept — otherwise a player
+ * could accept their own proposal.
+ */
 export async function acceptMatch(matchId: string, actingUserId: string) {
-  // TODO: verify turn, set status=SCHEDULED, snapshot scheduledDateTime, write ACCEPTED event,
-  // generate 4 MatchResultToken rows (WON/LOST x challenger/opponent), send confirmation emails.
-  throw new Error("Not implemented");
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.NEGOTIATING) {
+    throw new MatchValidationError("This match is no longer under negotiation");
+  }
+  if (match.awaitingResponseFromUserId !== actingUserId) {
+    throw new MatchValidationError("You can't accept your own proposal");
+  }
+
+  // TODO: generate the 4 MatchResultToken rows (WON/LOST x challenger/opponent) and send
+  // confirmation emails once the result-submission flow exists.
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.SCHEDULED,
+        scheduledDateTime: match.proposedDateTime,
+        lastActionAt: new Date(),
+      },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId,
+        type: MatchEventType.ACCEPTED,
+        actorUserId: actingUserId,
+        snapshotDateTime: match.proposedDateTime,
+        snapshotLocationId: match.proposedLocationId,
+      },
+    });
+
+    return updated;
+  });
 }
 
+/** Rejects the challenge outright. Terminal — a fresh challenge means a new Match. */
 export async function declineMatch(matchId: string, actingUserId: string) {
-  // TODO: verify turn, set status=DECLINED (terminal), write DECLINED event.
-  throw new Error("Not implemented");
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.NEGOTIATING) {
+    throw new MatchValidationError("This match is no longer under negotiation");
+  }
+  if (match.awaitingResponseFromUserId !== actingUserId) {
+    throw new MatchValidationError("You can't decline your own proposal");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: { status: MatchStatus.DECLINED, lastActionAt: new Date() },
+    });
+
+    await tx.matchEvent.create({
+      data: { matchId, type: MatchEventType.DECLINED, actorUserId: actingUserId },
+    });
+
+    return updated;
+  });
+}
+
+/** Calls off an arranged match. Either player may do this, with an optional reason. */
+export async function cancelMatch(matchId: string, actingUserId: string, comment?: string) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.SCHEDULED) {
+    throw new MatchValidationError("Only a scheduled match can be cancelled");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: { status: MatchStatus.CANCELLED, lastActionAt: new Date() },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId,
+        type: MatchEventType.CANCELLED,
+        actorUserId: actingUserId,
+        comment,
+      },
+    });
+
+    return updated;
+  });
 }
 
 export type ResultOutcomeInput = "WON" | "LOST";

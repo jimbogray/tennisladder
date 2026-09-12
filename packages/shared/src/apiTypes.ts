@@ -12,6 +12,8 @@ export interface PublicUserDto {
   role: UserRole;
   participatesInLadder: boolean;
   points: number;
+  // Serialized from a Decimal(2,1) to one decimal place; null when no rating is recorded.
+  ustaRating: string | null;
 }
 
 export interface SessionUserDto extends PublicUserDto {
@@ -24,6 +26,8 @@ export interface LadderEntryDto {
   userId: string;
   firstName: string;
   lastName: string;
+  // Serialized from a Decimal(2,1); null for players who haven't recorded a rating.
+  ustaRating: string | null;
   points: number;
   wins: number;
   losses: number;
@@ -52,6 +56,10 @@ export interface MatchDto {
   status: MatchStatus;
   challengerId: string;
   opponentId: string;
+  // Joined participants, narrowed to the public shape — a player must never see another
+  // player's email address.
+  challenger: PublicUserDto;
+  opponent: PublicUserDto;
   proposedDateTime: string;
   proposedLocationId: string;
   proposedComment: string | null;
@@ -66,6 +74,7 @@ export interface MatchDto {
 }
 
 export interface MatchDetailDto extends MatchDto {
+  proposedLocation: LocationDto;
   events: MatchEventDto[];
 }
 

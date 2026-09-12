@@ -14,7 +14,7 @@ import { NegotiationsPage } from "./pages/NegotiationsPage.js";
 import { AdminNegotiationsPage } from "./pages/AdminNegotiationsPage.js";
 import { LocationsPage } from "./pages/LocationsPage.js";
 import { AdminPlayersPage } from "./pages/AdminPlayersPage.js";
-import { AdminRegistrationCodesPage } from "./pages/AdminRegistrationCodesPage.js";
+import { AdminInvitesPage } from "./pages/AdminInvitesPage.js";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage.js";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage.js";
 import { ResultConfirmPage } from "./pages/ResultConfirmPage.js";
@@ -69,10 +69,10 @@ export function App() {
           }
         />
         <Route
-          path="/admin/registration-codes"
+          path="/admin/invites"
           element={
             <RequireAdmin>
-              <AdminRegistrationCodesPage />
+              <AdminInvitesPage />
             </RequireAdmin>
           }
         />

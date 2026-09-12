@@ -24,8 +24,20 @@ export function proposeMatch(body: ProposeMatchRequest) {
   return apiFetch<MatchDto>("/matches", { method: "POST", body: JSON.stringify(body) });
 }
 
+/** Revise your own still-unanswered offer. The turn stays with the other player. */
+export function amendProposal(id: string, body: CounterProposeRequest) {
+  return apiFetch<MatchDto>(`/matches/${id}/amend`, { method: "POST", body: JSON.stringify(body) });
+}
+
 export function counterPropose(id: string, body: CounterProposeRequest) {
   return apiFetch<MatchDto>(`/matches/${id}/counter`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function cancelMatch(id: string, comment?: string) {
+  return apiFetch<MatchDto>(`/matches/${id}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
 }
 
 export function acceptMatch(id: string) {

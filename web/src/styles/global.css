@@ -303,6 +303,64 @@ tbody tr:hover {
   background: rgba(215, 225, 0, 0.14);
 }
 
+/* A row the signed-in player is part of — shared by the ladder and matches tables.
+   Matches the specificity of the nth-child/hover rules above and is declared after them, so it
+   wins on striped rows and stays highlighted on hover. */
+
+tbody tr.row-me,
+tbody tr.row-me:hover {
+  background: rgba(215, 225, 0, 0.3);
+}
+
+tbody tr.row-me td {
+  font-weight: 700;
+  color: var(--court-green-dark);
+}
+
+tbody tr.row-me td:first-child {
+  box-shadow: inset 4px 0 0 var(--court-green);
+}
+
+.challenge-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  /* Green ground: the tennis-ball glyph is itself yellow-green and vanishes on a yellow pill. */
+  background: var(--court-green);
+  box-shadow: 0 1px 2px rgba(11, 61, 36, 0.15);
+  font-size: 0.95rem;
+  line-height: 1;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.challenge-link:hover {
+  background: var(--court-green-dark);
+  text-decoration: none;
+}
+
+.challenge-link:active {
+  transform: translateY(1px);
+}
+
+.you-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--court-green);
+  color: var(--white);
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 /* Auth pages (landing / login / register) */
 
 .auth-page {
@@ -343,6 +401,112 @@ tbody tr:hover {
   flex-direction: column;
   gap: 0.6rem;
   align-items: center;
+}
+
+/* Match detail */
+
+.form-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.button-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  box-shadow: none;
+}
+
+.button-secondary:hover {
+  background: rgba(30, 122, 60, 0.06);
+  border-color: var(--court-green);
+  color: var(--court-green-dark);
+}
+
+.button-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(179, 38, 30, 0.3);
+  box-shadow: none;
+}
+
+.button-danger:hover {
+  background: var(--danger);
+  color: var(--white);
+}
+
+.match-detail {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.65rem 2rem;
+  align-items: baseline;
+  margin: 0 0 1.75rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.match-detail dt {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.match-detail dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--court-green-dark);
+}
+
+.match-detail-address {
+  display: block;
+  margin-top: 0.15rem;
+  font-weight: 400;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 30rem) {
+  .match-detail {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+
+  .match-detail dd {
+    margin-bottom: 0.6rem;
+  }
+}
+
+/* Invites */
+
+.invite-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.invite-form {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 520px;
+  margin-bottom: 1rem;
+}
+
+.invite-form input {
+  flex: 1;
+}
+
+.invite-sent {
+  color: var(--court-green);
+  font-weight: 600;
 }
 
 /* Locations */

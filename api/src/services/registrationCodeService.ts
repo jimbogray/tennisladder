@@ -11,7 +11,11 @@ function generateFourDigitCode(): string {
  * the DB level by a partial unique index (WHERE used_at IS NULL) — see prisma/MIGRATION_NOTES.md —
  * so on the rare collision this simply retries.
  */
-export async function generateRegistrationCode(createdByAdminId: string, intendedForNote?: string) {
+export async function generateRegistrationCode(
+  createdByAdminId: string,
+  intendedForNote?: string,
+  invitedEmail?: string,
+) {
   const expiresAt = new Date(Date.now() + env.registrationCodeTtlHours * 60 * 60 * 1000);
 
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -21,6 +25,7 @@ export async function generateRegistrationCode(createdByAdminId: string, intende
           code: generateFourDigitCode(),
           createdByAdminId,
           intendedForNote,
+          invitedEmail,
           expiresAt,
         },
       });
