@@ -16,6 +16,9 @@ enum UserRole {
 enum MatchStatus {
   NEGOTIATING
   DECLINED
+  // Challenger pulled their own challenge before it was agreed (vs DECLINED, the opponent
+  // rejecting it, and CANCELLED, an already-arranged match being called off).
+  WITHDRAWN
   SCHEDULED
   RESULT_PENDING
   RESULT_DISPUTED
@@ -30,9 +33,14 @@ enum MatchEventType {
   COUNTER_PROPOSED
   ACCEPTED
   DECLINED
+  // The challenger pulled their own challenge before it was ever agreed. Distinct from DECLINED
+  // (the other player rejecting) and from CANCELLED (calling off an arranged match).
+  WITHDRAWN
   // Either player called off an already-scheduled match (ADMIN_CANCELLED is the admin equivalent).
   CANCELLED
   RESULT_SUBMITTED
+  // Reporter revised their proposed score before the other player answered.
+  RESULT_AMENDED
   RESULT_CONFIRMED
   RESULT_DISPUTED
   ADMIN_OVERRIDE_RESULT
@@ -42,6 +50,7 @@ enum MatchEventType {
 enum ResultOutcome {
   WON
   LOST
+  TIED
 }
 
 model User {
@@ -145,7 +154,14 @@ model Match {
 
   scheduledDateTime DateTime?
 
+  // Reason given when a scheduled match was called off. Mirrored from the CANCELLED MatchEvent
+  // so the list views can show it without loading each match's event history.
+  cancellationComment String?
+
   resultReportedByUserId String?
+  // A tie has no winner or loser, so winnerId/loserId stay null — this flag is what distinguishes
+  // a completed tie from a match with no reported result.
+  isTie                  Boolean   @default(false)
   winnerId               String?
   loserId                String?
   pointsAwarded          Int?

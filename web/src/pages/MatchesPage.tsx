@@ -1,33 +1,60 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import type { MatchFilter, PublicUserDto } from "@tennisladder/shared";
+import type { MatchDto, MatchScope, MatchStatusFilter, PublicUserDto } from "@tennisladder/shared";
 import { fetchMatches } from "../api/matches.js";
 import { FilterToggleBar } from "../components/FilterToggleBar.js";
 import { MatchStatusBadge } from "../components/MatchStatusBadge.js";
 import { useAuth } from "../hooks/useAuth.js";
 
-function PlayerName({ player, isCurrentUser }: { player: PublicUserDto; isCurrentUser: boolean }) {
+type PlayerOutcome = "won" | "lost" | "tied" | null;
+
+/** Only a finished match has an outcome — a proposed score isn't one yet. */
+function outcomeFor(match: MatchDto, playerId: string): PlayerOutcome {
+  if (match.status !== "COMPLETED") return null;
+  if (match.isTie) return "tied";
+  if (match.winnerId === playerId) return "won";
+  if (match.loserId === playerId) return "lost";
+  return null;
+}
+
+function PlayerName({
+  player,
+  isCurrentUser,
+  outcome,
+}: {
+  player: PublicUserDto;
+  isCurrentUser: boolean;
+  outcome: PlayerOutcome;
+}) {
   return (
     <>
       {player.firstName} {player.lastName}
       {isCurrentUser ? <span className="you-badge">you</span> : null}
+      {outcome ? <span className={`result-badge result-${outcome}`}>{outcome}</span> : null}
     </>
   );
 }
 
 export function MatchesPage() {
   const { user } = useAuth();
-  const [filter, setFilter] = useState<MatchFilter>("all");
+  // Defaults to the signed-in player's own matches — the club's full list is rarely what you want.
+  const [scope, setScope] = useState<MatchScope>("mine");
+  const [status, setStatus] = useState<MatchStatusFilter | null>(null);
   const { data, isLoading } = useQuery({
-    queryKey: ["matches", filter],
-    queryFn: () => fetchMatches(filter),
+    queryKey: ["matches", scope, status],
+    queryFn: () => fetchMatches(scope, status),
   });
 
   return (
     <div>
       <h1>Matches</h1>
-      <FilterToggleBar value={filter} onChange={setFilter} />
+      <FilterToggleBar
+        scope={scope}
+        status={status}
+        onScopeChange={setScope}
+        onStatusChange={setStatus}
+      />
       <p>
         <Link to="/matches/new">Propose a challenge</Link>
       </p>
@@ -57,15 +84,23 @@ export function MatchesPage() {
                   className={challengerIsMe || opponentIsMe ? "row-me" : undefined}
                 >
                   <td>
-                    <PlayerName player={match.challenger} isCurrentUser={challengerIsMe} />
+                    <PlayerName
+                      player={match.challenger}
+                      isCurrentUser={challengerIsMe}
+                      outcome={outcomeFor(match, match.challenger.id)}
+                    />
                   </td>
                   <td>{match.challenger.ustaRating ?? "—"}</td>
                   <td>
-                    <PlayerName player={match.opponent} isCurrentUser={opponentIsMe} />
+                    <PlayerName
+                      player={match.opponent}
+                      isCurrentUser={opponentIsMe}
+                      outcome={outcomeFor(match, match.opponent.id)}
+                    />
                   </td>
                   <td>{match.opponent.ustaRating ?? "—"}</td>
                   <td>
-                    <MatchStatusBadge status={match.status} />
+                    <MatchStatusBadge status={match.status} note={match.cancellationComment} />
                   </td>
                   <td>
                     <Link to={`/matches/${match.id}`}>View</Link>

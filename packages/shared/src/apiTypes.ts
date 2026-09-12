@@ -31,6 +31,7 @@ export interface LadderEntryDto {
   points: number;
   wins: number;
   losses: number;
+  ties: number;
 }
 
 export interface LocationDto {
@@ -65,6 +66,10 @@ export interface MatchDto {
   proposedComment: string | null;
   awaitingResponseFromUserId: string;
   scheduledDateTime: string | null;
+  // Reason a scheduled match was called off; null unless status is CANCELLED.
+  cancellationComment: string | null;
+  // A tie has no winner or loser; this flag is what distinguishes it from an unplayed match.
+  isTie: boolean;
   winnerId: string | null;
   loserId: string | null;
   pointsAwarded: number | null;
