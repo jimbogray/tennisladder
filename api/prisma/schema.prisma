@@ -106,6 +106,9 @@ model RegistrationCode {
 model Location {
   id         String    @id @default(cuid())
   name       String    @unique
+  // Free-text postal address, normally filled in from Google Places autocomplete. Nullable
+  // because locations created before addresses existed have none.
+  address    String?
   archivedAt DateTime?
 
   createdAt DateTime @default(now())

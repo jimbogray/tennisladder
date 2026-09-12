@@ -344,3 +344,66 @@ tbody tr:hover {
   gap: 0.6rem;
   align-items: center;
 }
+
+/* Locations */
+
+.location-list {
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.location-item {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.9rem 1.1rem;
+}
+
+.location-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.location-address {
+  margin: 0.15rem 0 0;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+.location-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.location-actions button {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.location-map {
+  width: 100%;
+  height: 280px;
+  margin-top: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: block;
+}
+
+/* Google's autocomplete widget renders its own input in a closed shadow root, so only the host
+   element can be styled. It ships `color-scheme: light dark`, which renders a dark input on a
+   dark-mode OS — pin it to light to match the rest of this (light-only) design. */
+.address-autocomplete,
+gmp-place-autocomplete {
+  width: 100%;
+}
+
+gmp-place-autocomplete {
+  color-scheme: light;
+}
