@@ -241,6 +241,35 @@ export async function declineMatch(matchId: string, actingUserId: string) {
   });
 }
 
+/** The challenger pulls their own challenge before it's been agreed. Terminal. */
+export async function withdrawMatch(matchId: string, actingUserId: string, comment?: string) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.NEGOTIATING) {
+    throw new MatchValidationError("This match is no longer under negotiation");
+  }
+  if (match.challengerId !== actingUserId) {
+    throw new MatchValidationError("Only the challenger can withdraw this challenge");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.WITHDRAWN,
+        cancellationComment: comment ?? null,
+        lastActionAt: new Date(),
+      },
+    });
+
+    await tx.matchEvent.create({
+      data: { matchId, type: MatchEventType.WITHDRAWN, actorUserId: actingUserId, comment },
+    });
+
+    return updated;
+  });
+}
+
 /** Calls off an arranged match. Either player may do this, with an optional reason. */
 export async function cancelMatch(matchId: string, actingUserId: string, comment?: string) {
   const match = await loadForParticipant(matchId, actingUserId);
@@ -252,7 +281,11 @@ export async function cancelMatch(matchId: string, actingUserId: string, comment
   return prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
-      data: { status: MatchStatus.CANCELLED, lastActionAt: new Date() },
+      data: {
+        status: MatchStatus.CANCELLED,
+        cancellationComment: comment ?? null,
+        lastActionAt: new Date(),
+      },
     });
 
     await tx.matchEvent.create({
@@ -268,12 +301,177 @@ export async function cancelMatch(matchId: string, actingUserId: string, comment
   });
 }
 
-export type ResultOutcomeInput = "WON" | "LOST";
+export type ResultOutcomeInput = "WON" | "LOST" | "TIED";
 
-export async function submitResult(matchId: string, actingUserId: string, outcome: ResultOutcomeInput) {
-  // TODO: first submission -> RESULT_PENDING; second matching submission -> COMPLETED
-  // (calls applyLadderPoints in a transaction); second conflicting submission -> RESULT_DISPUTED.
-  throw new Error("Not implemented");
+/**
+ * An outcome is reported from the reporter's own point of view, so resolve it to winner/loser.
+ * A tie has neither, and is flagged instead — see Match.isTie.
+ */
+function resolveOutcome(
+  match: { challengerId: string; opponentId: string },
+  actingUserId: string,
+  outcome: ResultOutcomeInput,
+) {
+  if (outcome === "TIED") {
+    return { winnerId: null, loserId: null, isTie: true };
+  }
+  const other = otherPlayer(match, actingUserId);
+  return outcome === "WON"
+    ? { winnerId: actingUserId, loserId: other, isTie: false }
+    : { winnerId: other, loserId: actingUserId, isTie: false };
+}
+
+/**
+ * Reports the score for a played match, which the other player then has to answer. Either player
+ * may report; the turn passes to whoever didn't.
+ */
+export async function proposeResult(
+  matchId: string,
+  actingUserId: string,
+  outcome: ResultOutcomeInput,
+) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.SCHEDULED) {
+    throw new MatchValidationError("Only a scheduled match can be scored");
+  }
+
+  const { winnerId, loserId, isTie } = resolveOutcome(match, actingUserId, outcome);
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.RESULT_PENDING,
+        winnerId,
+        loserId,
+        isTie,
+        resultReportedByUserId: actingUserId,
+        awaitingResponseFromUserId: otherPlayer(match, actingUserId),
+        lastActionAt: new Date(),
+      },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId,
+        type: MatchEventType.RESULT_SUBMITTED,
+        actorUserId: actingUserId,
+        resultOutcome: outcome,
+      },
+    });
+
+    return updated;
+  });
+}
+
+/** Reporter corrects their own score before the other player has answered. Turn stays put. */
+export async function amendResult(
+  matchId: string,
+  actingUserId: string,
+  outcome: ResultOutcomeInput,
+) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.RESULT_PENDING) {
+    throw new MatchValidationError("There's no score awaiting a response on this match");
+  }
+  if (match.resultReportedByUserId !== actingUserId) {
+    throw new MatchValidationError("Only whoever reported the score can change it");
+  }
+
+  const { winnerId, loserId, isTie } = resolveOutcome(match, actingUserId, outcome);
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: { winnerId, loserId, isTie, lastActionAt: new Date() },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId,
+        type: MatchEventType.RESULT_AMENDED,
+        actorUserId: actingUserId,
+        resultOutcome: outcome,
+      },
+    });
+
+    return updated;
+  });
+}
+
+/**
+ * The other player agrees the score, which completes the match and moves ladder points. Points are
+ * applied inside the same transaction as the status change so a match can never be marked complete
+ * without its points landing.
+ */
+export async function confirmResult(matchId: string, actingUserId: string) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.RESULT_PENDING) {
+    throw new MatchValidationError("There's no score awaiting a response on this match");
+  }
+  if (match.resultReportedByUserId === actingUserId) {
+    throw new MatchValidationError("You can't confirm a score you reported yourself");
+  }
+  if (!match.isTie && (!match.winnerId || !match.loserId)) {
+    throw new MatchValidationError("This match has no reported score");
+  }
+
+  const { winnerId, loserId } = match;
+
+  return prisma.$transaction(async (tx) => {
+    // A tie moves nobody: points are only ever awarded for a win.
+    const pointsAwarded =
+      winnerId && loserId ? await applyLadderPoints(tx, winnerId, loserId) : 0;
+
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.COMPLETED,
+        pointsAwarded,
+        resultConfirmedAt: new Date(),
+        lastActionAt: new Date(),
+      },
+    });
+
+    await tx.matchEvent.create({
+      data: { matchId, type: MatchEventType.RESULT_CONFIRMED, actorUserId: actingUserId },
+    });
+
+    return updated;
+  });
+}
+
+/** The other player disagrees with the score. Lands on the admin dashboard for a manual override. */
+export async function rejectResult(matchId: string, actingUserId: string, comment?: string) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  if (match.status !== MatchStatus.RESULT_PENDING) {
+    throw new MatchValidationError("There's no score awaiting a response on this match");
+  }
+  if (match.resultReportedByUserId === actingUserId) {
+    throw new MatchValidationError("You can't reject a score you reported yourself");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: { status: MatchStatus.RESULT_DISPUTED, lastActionAt: new Date() },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId,
+        type: MatchEventType.RESULT_DISPUTED,
+        actorUserId: actingUserId,
+        comment,
+      },
+    });
+
+    return updated;
+  });
 }
 
 export async function adminOverrideResult(

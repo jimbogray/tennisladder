@@ -9,7 +9,9 @@ export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
     select: { id: true, firstName: true, lastName: true, points: true, ustaRating: true },
   });
 
-  const [wins, losses] = await Promise.all([
+  // Ties have no winnerId/loserId, so they're counted off the challenger/opponent columns and
+  // summed — a player can have tied as either side.
+  const [wins, losses, tiesAsChallenger, tiesAsOpponent] = await Promise.all([
     prisma.match.groupBy({
       by: ["winnerId"],
       where: { status: "COMPLETED" },
@@ -20,9 +22,26 @@ export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
       where: { status: "COMPLETED" },
       _count: { _all: true },
     }),
+    prisma.match.groupBy({
+      by: ["challengerId"],
+      where: { status: "COMPLETED", isTie: true },
+      _count: { _all: true },
+    }),
+    prisma.match.groupBy({
+      by: ["opponentId"],
+      where: { status: "COMPLETED", isTie: true },
+      _count: { _all: true },
+    }),
   ]);
   const winsByUserId = new Map(wins.map((w) => [w.winnerId, w._count._all]));
   const lossesByUserId = new Map(losses.map((l) => [l.loserId, l._count._all]));
+  const tiesByUserId = new Map<string, number>();
+  for (const row of tiesAsChallenger) {
+    tiesByUserId.set(row.challengerId, (tiesByUserId.get(row.challengerId) ?? 0) + row._count._all);
+  }
+  for (const row of tiesAsOpponent) {
+    tiesByUserId.set(row.opponentId, (tiesByUserId.get(row.opponentId) ?? 0) + row._count._all);
+  }
 
   res.json(
     players.map((player) => ({
@@ -35,6 +54,7 @@ export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
       points: player.points,
       wins: winsByUserId.get(player.id) ?? 0,
       losses: lossesByUserId.get(player.id) ?? 0,
+      ties: tiesByUserId.get(player.id) ?? 0,
     })),
   );
 });
