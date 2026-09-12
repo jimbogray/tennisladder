@@ -11,19 +11,27 @@ export const listLocations = asyncHandler(async (_req: Request, res: Response) =
   res.json(locations);
 });
 
-const upsertLocationSchema = z.object({ name: z.string().min(1) });
+const upsertLocationSchema = z.object({
+  name: z.string().min(1),
+  // Normalized to null so a cleared address field doesn't persist an empty string.
+  address: z
+    .string()
+    .max(500)
+    .optional()
+    .transform((value) => value?.trim() || null),
+});
 
 export const createLocation = asyncHandler(async (req: Request, res: Response) => {
-  const { name } = upsertLocationSchema.parse(req.body);
-  const location = await prisma.location.create({ data: { name } });
+  const { name, address } = upsertLocationSchema.parse(req.body);
+  const location = await prisma.location.create({ data: { name, address } });
   res.status(201).json(location);
 });
 
 export const updateLocation = asyncHandler(async (req: Request, res: Response) => {
-  const { name } = upsertLocationSchema.parse(req.body);
+  const { name, address } = upsertLocationSchema.parse(req.body);
   const location = await prisma.location.update({
     where: { id: req.params.id },
-    data: { name },
+    data: { name, address },
   });
   res.json(location);
 });

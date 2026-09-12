@@ -32,6 +32,7 @@ export interface LadderEntryDto {
 export interface LocationDto {
   id: string;
   name: string;
+  address: string | null;
   archivedAt: string | null;
 }
 

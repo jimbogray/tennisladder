@@ -5,17 +5,17 @@ export function fetchLocations() {
   return apiFetch<LocationDto[]>("/locations");
 }
 
-export function createLocation(name: string) {
+export function createLocation(name: string, address: string) {
   return apiFetch<LocationDto>("/admin/locations", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, address }),
   });
 }
 
-export function updateLocation(id: string, name: string) {
+export function updateLocation(id: string, name: string, address: string) {
   return apiFetch<LocationDto>(`/admin/locations/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, address }),
   });
 }
 
