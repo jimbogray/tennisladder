@@ -1,0 +1,143 @@
+name: Deploy environment
+
+# Reusable: deploys one commit to one hosted environment. Called by deploy-staging.yml and
+# deploy-production.yml. Secrets and variables are read from the GitHub environment named by
+# `environment`, so the same steps target staging or production without knowing which.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment to deploy to (staging or production)
+        required: true
+        type: string
+      sha:
+        description: Commit to deploy; also the tag of its already-built API image
+        required: true
+        type: string
+
+jobs:
+  # Migrations gate the rest: if one fails, neither the API nor the site is updated.
+  migrate:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      # Check out the commit being deployed, not the workflow's own ref — the migrations must match
+      # the image being rolled out, which matters when production promotes an older commit.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # GitHub runners have no fixed egress IP, so the firewall is opened for this run only and
+      # closed again below, even if the migration fails.
+      - name: Open Postgres firewall for this runner
+        id: firewall
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          SERVER: ${{ vars.POSTGRES_SERVER_NAME }}
+          RULE: gh-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          RUNNER_IP=$(curl -sf https://api.ipify.org)
+          echo "rule-name=$RULE" >> "$GITHUB_OUTPUT"
+          az postgres flexible-server firewall-rule create \
+            --resource-group "$RESOURCE_GROUP" --server-name "$SERVER" --name "$RULE" \
+            --start-ip-address "$RUNNER_IP" --end-ip-address "$RUNNER_IP" --output none
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy --schema api/prisma/schema.prisma
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Close Postgres firewall
+        if: always() && steps.firewall.outputs.rule-name != ''
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          SERVER: ${{ vars.POSTGRES_SERVER_NAME }}
+          RULE: ${{ steps.firewall.outputs.rule-name }}
+        run: |
+          az postgres flexible-server firewall-rule delete \
+            --resource-group "$RESOURCE_GROUP" --server-name "$SERVER" --name "$RULE" \
+            --yes --output none
+
+  api:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # No build here: the image was built once from this commit before staging, and every
+      # environment runs that same image.
+      - name: Roll out image
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP: ${{ vars.CONTAINER_APP_NAME }}
+          IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/tennisladder-api:${{ inputs.sha }}
+        run: |
+          az containerapp update --resource-group "$RESOURCE_GROUP" --name "$APP" \
+            --image "$IMAGE" --output none
+
+      - name: Smoke check
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl -sf "$API_BASE_URL/health" | grep -q '"ok"'; then
+              echo "API healthy"; exit 0
+            fi
+            echo "attempt $attempt: not healthy yet"; sleep 10
+          done
+          echo "API did not become healthy"; exit 1
+
+  web:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Unlike the API image, the site is built per environment: Vite inlines the API URL at build
+      # time, so a staging build would call the staging API even if deployed to production.
+      - name: Build web
+        run: npm run build --workspace=@tennisladder/web
+        env:
+          VITE_API_BASE_URL: ${{ vars.API_BASE_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+
+      - name: Keep non-production out of search engines
+        if: inputs.environment != 'production'
+        run: |
+          printf 'User-agent: *\nDisallow: /\n' > web/dist/robots.txt
+
+      - name: Deploy to Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: web/dist
+          skip_app_build: true
