@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
+import { AccountType } from "@prisma/client";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { generateRegistrationCode } from "../services/registrationCodeService.js";
@@ -7,22 +8,31 @@ import { sendEmail } from "../services/emailService.js";
 import { renderInviteEmail } from "../emails/templates/invite.js";
 import { env } from "../config/env.js";
 
-const createCodeSchema = z.object({ intendedForNote: z.string().optional() });
+// Defaults to PLAYER so a client that doesn't send a type can never hand out admin rights.
+const accountTypeSchema = z.nativeEnum(AccountType).default(AccountType.PLAYER);
+
+const createCodeSchema = z.object({
+  intendedForNote: z.string().optional(),
+  accountType: accountTypeSchema,
+});
 
 export const createRegistrationCode = asyncHandler(async (req: Request, res: Response) => {
-  const { intendedForNote } = createCodeSchema.parse(req.body ?? {});
-  const code = await generateRegistrationCode(req.user!.id, intendedForNote);
+  const { intendedForNote, accountType } = createCodeSchema.parse(req.body ?? {});
+  const code = await generateRegistrationCode(req.user!.id, { accountType, intendedForNote });
   res.status(201).json(code);
 });
 
-const inviteSchema = z.object({ email: z.string().email("Enter a valid email address") });
+const inviteSchema = z.object({
+  email: z.string().email("Enter a valid email address"),
+  accountType: accountTypeSchema,
+});
 
 /**
  * Issues a registration code and emails it as a one-click invite link. The code is created first
  * and kept even if the send fails, so an admin can fall back to reading the code out manually.
  */
 export const inviteByEmail = asyncHandler(async (req: Request, res: Response) => {
-  const { email } = inviteSchema.parse(req.body);
+  const { email, accountType } = inviteSchema.parse(req.body);
   const invitedEmail = email.trim().toLowerCase();
 
   const existingUser = await prisma.user.findUnique({ where: { email: invitedEmail } });
@@ -31,7 +41,7 @@ export const inviteByEmail = asyncHandler(async (req: Request, res: Response) =>
     return;
   }
 
-  const code = await generateRegistrationCode(req.user!.id, undefined, invitedEmail);
+  const code = await generateRegistrationCode(req.user!.id, { accountType, invitedEmail });
 
   const registerUrl = `${env.webAppUrl}/register?code=${encodeURIComponent(code.code)}`;
   const { subject, html } = renderInviteEmail({

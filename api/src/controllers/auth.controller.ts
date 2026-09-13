@@ -7,7 +7,11 @@ import { prisma } from "../config/prisma.js";
 import { hashPassword, verifyPassword } from "../auth/passwordUtils.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../auth/authConfig.js";
 import { hashToken } from "../services/tokenService.js";
-import { redeemRegistrationCode, RegistrationCodeError } from "../services/registrationCodeService.js";
+import {
+  accountFieldsFor,
+  redeemRegistrationCode,
+  RegistrationCodeError,
+} from "../services/registrationCodeService.js";
 import { env } from "../config/env.js";
 
 // Accept a User without the (globally omitted) passwordHash — these helpers never read it.
@@ -88,13 +92,18 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     throw err;
   }
 
+  // The invite, not the registrant, decides whether the account is a player, an admin, or both.
+  const { role, participatesInLadder } = accountFieldsFor(code.accountType);
   const user = await prisma.user.create({
     data: {
       firstName: data.firstName,
       lastName: data.lastName,
       email,
       passwordHash: await hashPassword(data.password),
-      ustaRating: data.ustaRating ?? null,
+      // A rating only means something for someone on the ladder.
+      ustaRating: participatesInLadder ? (data.ustaRating ?? null) : null,
+      role,
+      participatesInLadder,
       registrationCodeId: code.id,
     },
   });

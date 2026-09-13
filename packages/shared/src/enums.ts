@@ -4,6 +4,14 @@ export const UserRole = {
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
+/** The kind of account an invite creates; see AccountType in api/prisma/schema.prisma. */
+export const AccountType = {
+  PLAYER: "PLAYER",
+  ADMIN: "ADMIN",
+  PLAYER_ADMIN: "PLAYER_ADMIN",
+} as const;
+export type AccountType = (typeof AccountType)[keyof typeof AccountType];
+
 export const MatchStatus = {
   NEGOTIATING: "NEGOTIATING",
   DECLINED: "DECLINED",

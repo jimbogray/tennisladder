@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AccountType } from "@tennisladder/shared";
 import {
   createRegistrationCode,
   expireRegistrationCode,
@@ -8,6 +9,14 @@ import {
   type RegistrationCodeDto,
 } from "../api/admin.js";
 import { ApiError } from "../api/client.js";
+
+const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  PLAYER: "Player",
+  ADMIN: "Admin",
+  PLAYER_ADMIN: "Player and Admin",
+};
+
+const ACCOUNT_TYPES: AccountType[] = [AccountType.PLAYER, AccountType.ADMIN, AccountType.PLAYER_ADMIN];
 
 function statusOf(c: RegistrationCodeDto): "active" | "used" | "expired" {
   if (c.usedAt) return "used";
@@ -21,6 +30,9 @@ export function AdminInvitesPage() {
     queryKey: ["admin", "registration-codes"],
     queryFn: fetchRegistrationCodes,
   });
+  // Shared by "Generate new code" and "Send invite". Reset to Player after each use, so an admin
+  // invite is always a deliberate choice rather than left over from the previous one.
+  const [accountType, setAccountType] = useState<AccountType>(AccountType.PLAYER);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -32,8 +44,15 @@ export function AdminInvitesPage() {
   }
 
   async function handleGenerate() {
-    await createRegistrationCode();
-    await refresh();
+    setError(null);
+    setSentTo(null);
+    try {
+      await createRegistrationCode(accountType);
+      setAccountType(AccountType.PLAYER);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not generate a code. Please try again.");
+    }
   }
 
   async function handleExpire(id: string) {
@@ -47,9 +66,10 @@ export function AdminInvitesPage() {
     setSentTo(null);
     setSending(true);
     try {
-      await inviteByEmail(email);
+      await inviteByEmail(email, accountType);
       setSentTo(email);
       setEmail("");
+      setAccountType(AccountType.PLAYER);
       setShowInviteForm(false);
       await refresh();
     } catch (err) {
@@ -64,6 +84,16 @@ export function AdminInvitesPage() {
       <h1>Invites</h1>
 
       <div className="invite-actions">
+        <label className="invite-account-type">
+          Account type
+          <select value={accountType} onChange={(e) => setAccountType(e.target.value as AccountType)}>
+            {ACCOUNT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {ACCOUNT_TYPE_LABELS[type]}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="button" onClick={handleGenerate}>
           Generate new code
         </button>
@@ -100,6 +130,7 @@ export function AdminInvitesPage() {
             <tr>
               <th>Code</th>
               <th>Invited</th>
+              <th>Type</th>
               <th>Status</th>
               <th>Expires</th>
               <th>Used</th>
@@ -113,6 +144,7 @@ export function AdminInvitesPage() {
                 <tr key={c.id}>
                   <td>{c.code}</td>
                   <td>{c.invitedEmail ?? "—"}</td>
+                  <td className="invite-type">{ACCOUNT_TYPE_LABELS[c.accountType]}</td>
                   <td>{status}</td>
                   <td>{new Date(c.expiresAt).toLocaleString()}</td>
                   <td>{c.usedAt ? new Date(c.usedAt).toLocaleString() : "—"}</td>
