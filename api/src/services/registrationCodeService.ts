@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import type { AccountType, UserRole } from "@prisma/client";
 import { prisma } from "../config/prisma.js";
 import { env } from "../config/env.js";
 
@@ -13,9 +14,9 @@ function generateFourDigitCode(): string {
  */
 export async function generateRegistrationCode(
   createdByAdminId: string,
-  intendedForNote?: string,
-  invitedEmail?: string,
+  options: { accountType: AccountType; intendedForNote?: string; invitedEmail?: string },
 ) {
+  const { accountType, intendedForNote, invitedEmail } = options;
   const expiresAt = new Date(Date.now() + env.registrationCodeTtlHours * 60 * 60 * 1000);
 
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -26,6 +27,7 @@ export async function generateRegistrationCode(
           createdByAdminId,
           intendedForNote,
           invitedEmail,
+          accountType,
           expiresAt,
         },
       });
@@ -35,6 +37,24 @@ export async function generateRegistrationCode(
     }
   }
   throw new Error("Failed to generate a unique registration code");
+}
+
+/**
+ * What an invite's account type grants on redemption. Admin-only accounts are coach-admins, kept
+ * off the ladder; see participatesInLadder on User.
+ */
+export function accountFieldsFor(accountType: AccountType): {
+  role: UserRole;
+  participatesInLadder: boolean;
+} {
+  switch (accountType) {
+    case "PLAYER":
+      return { role: "PLAYER", participatesInLadder: true };
+    case "ADMIN":
+      return { role: "ADMIN", participatesInLadder: false };
+    case "PLAYER_ADMIN":
+      return { role: "ADMIN", participatesInLadder: true };
+  }
 }
 
 /** Thrown when a registration code can't be redeemed. Callers should surface this as a 400. */

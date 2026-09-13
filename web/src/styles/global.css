@@ -627,6 +627,18 @@ tbody tr.row-me td:first-child {
   margin-bottom: 1rem;
 }
 
+.invite-actions button {
+  align-self: flex-end;
+}
+
+.invite-account-type {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .invite-form {
   flex-direction: row;
   align-items: center;
@@ -637,6 +649,10 @@ tbody tr.row-me td:first-child {
 
 .invite-form input {
   flex: 1;
+}
+
+.invite-type {
+  white-space: nowrap;
 }
 
 .invite-sent {

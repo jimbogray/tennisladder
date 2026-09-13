@@ -13,6 +13,15 @@ enum UserRole {
   ADMIN
 }
 
+// The kind of account an invite creates. Not stored on User: redeeming an invite maps it onto
+// `role` + `participatesInLadder` (PLAYER = player on the ladder, ADMIN = coach-admin off the
+// ladder, PLAYER_ADMIN = admin who also plays).
+enum AccountType {
+  PLAYER
+  ADMIN
+  PLAYER_ADMIN
+}
+
 enum MatchStatus {
   NEGOTIATING
   DECLINED
@@ -104,6 +113,7 @@ model RegistrationCode {
   intendedForNote  String?
   // Set when the code was issued by emailing an invite, rather than generated for manual handout.
   invitedEmail     String?
+  accountType      AccountType @default(PLAYER)
 
   usedAt    DateTime?
   usedByUser User?
