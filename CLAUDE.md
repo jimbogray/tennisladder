@@ -32,8 +32,11 @@ Prisma (from `api/`):
 ```bash
 npm run prisma:generate            # regenerate the Prisma client after schema changes
 npm run prisma:migrate             # prisma migrate dev
-npx tsx scripts/create-admin.ts    # seed/upsert an admin user (edit the script's email/password first)
+ADMIN_EMAIL=... ADMIN_PASSWORD=... npx tsx scripts/create-admin.ts  # create an admin or promote an existing account
 ```
+
+For hosted environments, use `./infra/create-admin.sh <staging|production>` from the repo root. It
+supplies `DATABASE_URL` and temporarily opens the database firewall.
 
 **No test suite exists in this repo yet** — there is no test runner configured and no `*.test.ts`
 files. Don't assume `npm test` works.

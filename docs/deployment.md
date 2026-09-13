@@ -153,7 +153,7 @@ PG_ADMIN_PASSWORD='<strong password>' ./infra/provision-environment.sh staging
 
 Creates the resource group, Postgres server and database, Container Apps environment and app,
 Static Web App, and the GitHub deploy identity. Postgres takes several minutes. Keep the password —
-step 5 needs it again.
+steps 5 and 7 need it again.
 
 Re-running is safe. Existing resources are left alone, and JWT secrets are only generated when
 missing, since regenerating them would sign every user out.
@@ -198,15 +198,40 @@ list. Then add `https://staging.playmore.tennis/*` to the Maps key's HTTP referr
 Merge to `main` (or run `gh workflow run deploy-staging.yml`) and check
 `https://staging.playmore.tennis`.
 
-### 7. Production
+### 7. Create the first admin
+
+A new environment has no accounts, and registering needs an invite that only an admin can send. So
+after the first deploy has applied migrations, create an admin from your laptop:
+
+```bash
+./infra/create-admin.sh staging
+```
+
+It prompts for the Postgres admin password from step 2, then the admin's email and password (at
+least 12 characters, not echoed). It opens the database firewall to your public IP for the run and
+removes that rule on exit, even on failure or Ctrl-C.
+
+The account it creates is a coach-admin: full admin rights, but not on the ladder. To be an admin
+who also plays, register through an invite first, then run the script with that email. An existing
+account is promoted and its password reset, and it keeps its place on the ladder. Running the script
+again for the same email is also how you reset a lost admin password.
+
+Set `ADMIN_FIRST_NAME` / `ADMIN_LAST_NAME` to name a new account (default "Admin User"). Then sign
+in and send invites from **Invites** in the menu — staging logs emails rather than sending them, so copy
+the invite code from the page.
+
+### 8. Production
 
 Repeat steps 2–5 with `production`, set up the forwarding described in step 3, then:
 
 ```bash
 gh workflow run deploy-production.yml
+./infra/create-admin.sh production
 ```
 
-### 8. Production email
+Use a different admin password than staging.
+
+### 9. Production email
 
 Create Communication Services, connect `playmore.tennis` as a sending domain (it adds more TXT
 records in GoDaddy), then re-run provisioning with the connection string:
@@ -257,6 +282,12 @@ the GitHub environment (`repo:jimbogray/tennisladder:environment:staging`), not 
 **Smoke check fails on the first deploy** — the API's custom hostname isn't bound yet; run
 `bind-domains.sh` for that environment.
 
+**`create-admin.sh`: `the users table doesn't exist`** — no deploy has run migrations against that
+database yet. Run the environment's deploy workflow first.
+
+**`create-admin.sh`: `database still unreachable`** — something between your laptop and Azure blocks
+outbound port 5432, which some office and public networks do. Try another network.
+
 **Production refuses a commit** — it hasn't deployed successfully to staging. Merge it to `main`
 (or rerun the staging workflow for it) first.
 
@@ -271,4 +302,3 @@ the GitHub environment (`repo:jimbogray/tennisladder:environment:staging`), not 
 - **Result tokens are never generated**, so the "I won / I lost" email links are unreachable.
 - **No backup policy configured.** Flexible Server keeps 7 days of automated backups by default;
   raise it for production and decide on geo-redundancy before real data lands.
-- **Rotate the seeded admin.** `api/scripts/create-admin.ts` contains a hardcoded dev password.
