@@ -1,6 +1,8 @@
 # Build context is the REPO ROOT, not api/ — this is an npm workspaces monorepo and the API
 # depends on @tennisladder/shared, which has to be built from source alongside it.
 #   docker build -f api/Dockerfile .
+#
+# The Node major here (both stages) must match .nvmrc, which CI and local installs follow.
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
