@@ -107,7 +107,20 @@ const futureDateTime = z
   .datetime()
   .refine((value) => new Date(value).getTime() > Date.now(), {
     message: "Proposed date and time must be in the future",
-  });
+  })
+  // Checked in UTC, which is equivalent to local time here: every timezone offset in use is
+  // itself a whole number of quarter hours, so the 15-minute grid is the same in both.
+  .refine(
+    (value) => {
+      const date = new Date(value);
+      return (
+        date.getUTCMinutes() % 15 === 0 &&
+        date.getUTCSeconds() === 0 &&
+        date.getUTCMilliseconds() === 0
+      );
+    },
+    { message: "Match times must be on a 15-minute interval" },
+  );
 
 const proposeSchema = z.object({
   opponentId: z.string().min(1),

@@ -7,13 +7,7 @@ import { proposeMatch } from "../api/matches.js";
 import { OpponentPicker } from "../components/OpponentPicker.js";
 import { LocationPicker } from "../components/LocationPicker.js";
 import { ApiError } from "../api/client.js";
-
-/** "now" as datetime-local wants it (YYYY-MM-DDTHH:mm in the viewer's own timezone). */
-function nowForDateTimeLocal(): string {
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  return now.toISOString().slice(0, 16);
-}
+import { MatchDateTimePicker } from "../components/MatchDateTimePicker.js";
 
 export function NewMatchPage() {
   const { data: players } = useQuery({ queryKey: ["players", "challengeable"], queryFn: fetchChallengeablePlayers });
@@ -49,11 +43,10 @@ export function NewMatchPage() {
       <h1>Propose a Challenge</h1>
       {error && <p role="alert">{error}</p>}
       <OpponentPicker players={players ?? []} value={opponentId} onChange={setOpponentId} />
-      <input
-        type="datetime-local"
-        min={nowForDateTimeLocal()}
+      <MatchDateTimePicker
+        id="proposed-datetime"
         value={proposedDateTime}
-        onChange={(e) => setProposedDateTime(e.target.value)}
+        onChange={setProposedDateTime}
       />
       <LocationPicker locations={locations ?? []} value={proposedLocationId} onChange={setProposedLocationId} />
       <textarea
