@@ -14,6 +14,13 @@ documents *why* things are shaped the way they are, not just what exists.
 
 npm workspaces monorepo — always run installs/scripts from the repo root unless noted.
 
+**Node 22 only.** `.nvmrc` is the source of truth: CI and deploy workflows read it via
+`node-version-file`, and `api/Dockerfile` hard-codes the same major. The root `engines` field plus
+`engine-strict=true` in `.npmrc` make `npm install` fail on any other major. That's deliberate:
+the npm bundled with newer Node skips dependency install scripts (Prisma, esbuild) unless approved,
+and has rewritten `package.json` ranges during a routine `npm install <pkg>`. When bumping Node,
+change `.nvmrc`, `engines`, `@types/node` and both Dockerfile `FROM` lines together.
+
 ```bash
 npm install                        # resolves all three workspaces; postinstall builds @tennisladder/shared
 npm run dev:api                    # tsx watch, http://localhost:4000
