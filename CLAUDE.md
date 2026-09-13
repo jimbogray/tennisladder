@@ -77,10 +77,25 @@ linking them, so a Prisma model change needs a matching manual DTO update.
 
 ### Auth model (session strategy is JWT, not DB sessions)
 
-No `@auth/prisma-adapter` — auth is hand-rolled against the `User` table directly. This exists
-because Auth.js can't combine a DB session strategy with a Credentials provider, and because the
-SPA and API are meant to be deployed on separate origins (see docs/architecture.md "Key Risk
-Flag") so a single shared cookie can't be relied on.
+No `@auth/prisma-adapter` — auth is hand-rolled against the `User` table directly, because
+Auth.js can't combine a DB session strategy with a Credentials provider.
+
+Hosted environments put the SPA (Static Web Apps) and API (Container Apps) on separate origins
+that are the **same site**, which is load-bearing: the refresh cookie is `sameSite: "lax"` and is
+only sent because both hosts share the registrable domain `playmore.tennis` —
+`staging.` + `api.staging.` for staging, `www.` + `api.` for production. Serving either from
+Azure's default `*.azurestaticapps.net` / `*.azurecontainerapps.io` hostnames would make it a
+third-party cookie, which Safari blocks.
+
+### Environments and deployment
+
+Local (laptop Postgres) → staging (auto-deployed on merge to `main`) → production (manual
+promotion via `deploy-production.yml`, which only accepts commits that passed staging). Each hosted
+environment has its own database, resource group, JWT secrets and least-privilege deploy identity;
+staging deliberately has no email configured. The API image is built once and promoted unchanged,
+but the SPA is rebuilt per environment because Vite bakes `VITE_API_BASE_URL` in at build time.
+Azure resources are provisioned with the idempotent scripts in `infra/` (all support `DRY_RUN=1`);
+see `docs/deployment.md` before changing any of it.
 
 - **Access token**: short-lived JWT, returned in the response body, held in memory only on the
   client (`web/src/api/client.ts`), sent as `Authorization: Bearer`. Never persisted to

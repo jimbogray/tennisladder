@@ -10,7 +10,9 @@ web/vite.config.ts
 web/public
 docs
 *.log
-.DS_Store
-.env
-.env.*
-!.env.example
+**/.DS_Store
+# Must be recursive: a bare ".env" only matches the repo root, and COPY api/ would otherwise bake
+# local secrets (api/.env) into the image.
+**/.env
+**/.env.*
+!**/.env.example
