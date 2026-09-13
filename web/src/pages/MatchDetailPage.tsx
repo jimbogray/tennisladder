@@ -17,6 +17,7 @@ import {
 } from "../api/matches.js";
 import { fetchLocations } from "../api/locations.js";
 import { ApiError } from "../api/client.js";
+import { formatMatchDateTime } from "../lib/dateTime.js";
 import { MatchStatusBadge } from "../components/MatchStatusBadge.js";
 import { ProposalForm } from "../components/ProposalForm.js";
 import { useAuth } from "../hooks/useAuth.js";
@@ -149,7 +150,7 @@ export function MatchDetailPage() {
         <dd>{data.opponent.ustaRating ?? "—"}</dd>
 
         <dt>{data.scheduledDateTime ? "Scheduled" : "Proposed"}</dt>
-        <dd>{new Date(data.scheduledDateTime ?? data.proposedDateTime).toLocaleString()}</dd>
+        <dd>{formatMatchDateTime(data.scheduledDateTime ?? data.proposedDateTime)}</dd>
 
         <dt>Location</dt>
         <dd>
