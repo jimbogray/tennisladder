@@ -2,14 +2,17 @@ import type {
   CounterProposeRequest,
   MatchDetailDto,
   MatchDto,
-  MatchFilter,
+  MatchScope,
+  MatchStatusFilter,
   ProposeMatchRequest,
   SubmitResultRequest,
 } from "@tennisladder/shared";
 import { apiFetch } from "./client.js";
 
-export function fetchMatches(filter: MatchFilter = "all") {
-  return apiFetch<MatchDto[]>(`/matches?filter=${filter}`);
+export function fetchMatches(scope: MatchScope, status: MatchStatusFilter | null) {
+  const params = new URLSearchParams({ scope });
+  if (status) params.set("status", status);
+  return apiFetch<MatchDto[]>(`/matches?${params}`);
 }
 
 export function fetchMyMatches() {
@@ -33,6 +36,14 @@ export function counterPropose(id: string, body: CounterProposeRequest) {
   return apiFetch<MatchDto>(`/matches/${id}/counter`, { method: "POST", body: JSON.stringify(body) });
 }
 
+/** Challenger pulls their own challenge before it's agreed. */
+export function withdrawMatch(id: string, comment?: string) {
+  return apiFetch<MatchDto>(`/matches/${id}/withdraw`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
+}
+
 export function cancelMatch(id: string, comment?: string) {
   return apiFetch<MatchDto>(`/matches/${id}/cancel`, {
     method: "POST",
@@ -48,8 +59,28 @@ export function declineMatch(id: string) {
   return apiFetch<MatchDto>(`/matches/${id}/decline`, { method: "POST" });
 }
 
-export function submitResult(id: string, body: SubmitResultRequest) {
+/** Report the score for a played match; the other player then confirms or rejects it. */
+export function proposeResult(id: string, body: SubmitResultRequest) {
   return apiFetch<MatchDto>(`/matches/${id}/result`, { method: "POST", body: JSON.stringify(body) });
+}
+
+/** Reporter corrects their own score before it's been answered. */
+export function amendResult(id: string, body: SubmitResultRequest) {
+  return apiFetch<MatchDto>(`/matches/${id}/result/amend`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function confirmResult(id: string) {
+  return apiFetch<MatchDto>(`/matches/${id}/result/confirm`, { method: "POST" });
+}
+
+export function rejectResult(id: string, comment?: string) {
+  return apiFetch<MatchDto>(`/matches/${id}/result/reject`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
 }
 
 export function fetchAdminPendingMatches() {

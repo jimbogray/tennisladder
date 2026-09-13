@@ -31,7 +31,7 @@ export function LadderTable({ entries }: { entries: LadderEntryDto[] }) {
               <td>{entry.ustaRating ?? "—"}</td>
               <td>{entry.points}</td>
               <td>
-                {entry.wins}-{entry.losses}
+                {entry.wins}-{entry.losses}-{entry.ties}
               </td>
               <td>
                 {canChallenge && !isCurrentUser ? (

@@ -1,17 +1,8 @@
 import { useState, type FormEvent } from "react";
 import type { LocationDto } from "@tennisladder/shared";
 import { LocationPicker } from "./LocationPicker.js";
-
-/** "now" as datetime-local wants it (YYYY-MM-DDTHH:mm in the viewer's own timezone). */
-function nowForDateTimeLocal(): string {
-  return toDateTimeLocal(new Date());
-}
-
-function toDateTimeLocal(value: Date | string): string {
-  const date = new Date(value);
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
-}
+import { toDateTimeLocal } from "../lib/dateTime.js";
+import { MatchDateTimePicker } from "./MatchDateTimePicker.js";
 
 /** Shared editor for a match proposal — used to amend your own offer and to counter theirs. */
 export function ProposalForm({
@@ -55,14 +46,7 @@ export function ProposalForm({
   return (
     <form onSubmit={handleSubmit}>
       <label htmlFor="proposal-datetime">Date and time</label>
-      <input
-        id="proposal-datetime"
-        type="datetime-local"
-        required
-        min={nowForDateTimeLocal()}
-        value={dateTime}
-        onChange={(e) => setDateTime(e.target.value)}
-      />
+      <MatchDateTimePicker id="proposal-datetime" value={dateTime} onChange={setDateTime} />
       <label htmlFor="proposal-location">Location</label>
       <LocationPicker locations={locations} value={locationId} onChange={setLocationId} />
       <textarea

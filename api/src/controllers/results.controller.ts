@@ -25,7 +25,14 @@ export const submitResultViaToken = asyncHandler(async (req: Request, res: Respo
     return;
   }
 
-  const match = await matchService.submitResult(resultToken.matchId, resultToken.userId, resultToken.outcome);
+  // TODO: when result tokens are actually generated (see acceptMatch), handle the second player's
+  // link too — an outcome matching the reported score should confirm it, a conflicting one reject
+  // it. Today only the first report can arrive this way, so it maps to proposing a score.
+  const match = await matchService.proposeResult(
+    resultToken.matchId,
+    resultToken.userId,
+    resultToken.outcome,
+  );
   await prisma.matchResultToken.update({
     where: { id: resultToken.id },
     data: { usedAt: new Date() },

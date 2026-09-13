@@ -7,6 +7,7 @@ export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 export const MatchStatus = {
   NEGOTIATING: "NEGOTIATING",
   DECLINED: "DECLINED",
+  WITHDRAWN: "WITHDRAWN",
   SCHEDULED: "SCHEDULED",
   RESULT_PENDING: "RESULT_PENDING",
   RESULT_DISPUTED: "RESULT_DISPUTED",
@@ -31,12 +32,20 @@ export type MatchEventType = (typeof MatchEventType)[keyof typeof MatchEventType
 export const ResultOutcome = {
   WON: "WON",
   LOST: "LOST",
+  TIED: "TIED",
 } as const;
 export type ResultOutcome = (typeof ResultOutcome)[keyof typeof ResultOutcome];
 
-export const MatchFilter = {
+// Whose matches to show, and which statuses — two independent axes that combine.
+export const MatchScope = {
+  MINE: "mine",
   ALL: "all",
+} as const;
+export type MatchScope = (typeof MatchScope)[keyof typeof MatchScope];
+
+/** Absent means every status. */
+export const MatchStatusFilter = {
   COMPLETED: "completed",
   PENDING: "pending",
 } as const;
-export type MatchFilter = (typeof MatchFilter)[keyof typeof MatchFilter];
+export type MatchStatusFilter = (typeof MatchStatusFilter)[keyof typeof MatchStatusFilter];

@@ -1,5 +1,7 @@
 import "dotenv/config";
 
+const isProduction = process.env.NODE_ENV === "production";
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -8,15 +10,29 @@ function required(name: string): string {
   return value;
 }
 
+/**
+ * Convenience default for local dev, hard failure in production. Used for the token signing
+ * secrets: falling back to a value that's committed to the repo would let anyone mint a valid
+ * admin token, so a missing secret has to stop the process rather than quietly work.
+ */
+function requiredInProduction(name: string, devFallback: string): string {
+  const value = process.env[name];
+  if (value) return value;
+  if (isProduction) {
+    throw new Error(`Missing required environment variable in production: ${name}`);
+  }
+  return devFallback;
+}
+
 export const env = {
   port: Number(process.env.PORT ?? 4000),
   webAppUrl: process.env.WEB_APP_URL ?? "http://localhost:5173",
 
   databaseUrl: required("DATABASE_URL"),
 
-  jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? "dev-access-secret",
+  jwtAccessSecret: requiredInProduction("JWT_ACCESS_SECRET", "dev-access-secret"),
   jwtAccessTtlMinutes: Number(process.env.JWT_ACCESS_TTL_MINUTES ?? 15),
-  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? "dev-refresh-secret",
+  jwtRefreshSecret: requiredInProduction("JWT_REFRESH_SECRET", "dev-refresh-secret"),
   jwtRefreshTtlDays: Number(process.env.JWT_REFRESH_TTL_DAYS ?? 30),
 
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",

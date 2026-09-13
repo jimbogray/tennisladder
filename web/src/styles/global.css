@@ -170,6 +170,62 @@ a:hover {
   border-color: rgba(255, 255, 255, 0.6);
 }
 
+/* Hamburger. The breakpoint is set just above the width the nav needs to sit on one row with
+   every link shown (~694px for an admin, who has one extra item), so the links collapse rather
+   than wrapping onto a second line. */
+
+.navbar-toggle {
+  display: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: var(--white);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.45rem 0.7rem;
+  box-shadow: none;
+}
+
+.navbar-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (max-width: 48rem) {
+  .navbar-toggle {
+    display: inline-flex;
+  }
+
+  /* Drops over the page rather than pushing it down. The navbar is position:sticky, which is
+     itself a containing block, so this anchors to the bar's bottom edge. */
+  .navbar-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+    padding: 0.75rem 1.5rem 1rem;
+    background: var(--court-green-dark);
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+    box-shadow: 0 10px 20px rgba(11, 61, 36, 0.25);
+  }
+
+  .navbar-links.is-open {
+    display: flex;
+  }
+
+  .navbar-links a {
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius);
+  }
+
+  .navbar-logout {
+    margin-top: 0.35rem;
+  }
+}
+
 /* Forms */
 
 form {
@@ -346,6 +402,34 @@ tbody tr.row-me td:first-child {
   transform: translateY(1px);
 }
 
+/* Marks who won, lost or tied a completed match, next to their name. */
+.result-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.result-won {
+  background: var(--ball-yellow);
+  color: var(--court-green-dark);
+}
+
+.result-lost {
+  background: #e8ece9;
+  color: var(--ink-soft);
+}
+
+.result-tied {
+  background: rgba(30, 122, 60, 0.12);
+  color: var(--court-green-dark);
+}
+
 .you-badge {
   display: inline-block;
   margin-left: 0.5rem;
@@ -401,6 +485,57 @@ tbody tr.row-me td:first-child {
   flex-direction: column;
   gap: 0.6rem;
   align-items: center;
+}
+
+.status-with-note {
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  cursor: help;
+}
+
+/* Match filter bar — the selected filter keeps the solid button treatment, the rest recede.
+   Without this every filter looks identical, which matters now that the default view is a
+   filtered one rather than the full list. */
+
+.filter-bar {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+/* Wider gap between the two groups than within one, so they read as separate filters. */
+.filter-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-bar button[aria-pressed="false"] {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  box-shadow: none;
+}
+
+.filter-bar button[aria-pressed="false"]:hover {
+  background: rgba(30, 122, 60, 0.06);
+  border-color: var(--court-green);
+  color: var(--court-green-dark);
+}
+
+.datetime-picker {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.datetime-picker input {
+  flex: 1 1 10rem;
+}
+
+.datetime-picker select {
+  flex: 0 1 9rem;
 }
 
 /* Match detail */

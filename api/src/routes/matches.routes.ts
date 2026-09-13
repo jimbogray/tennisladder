@@ -15,8 +15,12 @@ matchesRouter.post("/:id/amend", requireAuth, requireLadderParticipant, matches.
 matchesRouter.post("/:id/counter", requireAuth, requireLadderParticipant, matches.counterPropose);
 matchesRouter.post("/:id/accept", requireAuth, requireLadderParticipant, matches.acceptMatch);
 matchesRouter.post("/:id/decline", requireAuth, requireLadderParticipant, matches.declineMatch);
+matchesRouter.post("/:id/withdraw", requireAuth, requireLadderParticipant, matches.withdrawMatch);
 matchesRouter.post("/:id/cancel", requireAuth, requireLadderParticipant, matches.cancelMatch);
-matchesRouter.post("/:id/result", requireAuth, requireLadderParticipant, matches.submitResult);
+matchesRouter.post("/:id/result", requireAuth, requireLadderParticipant, matches.proposeResult);
+matchesRouter.post("/:id/result/amend", requireAuth, requireLadderParticipant, matches.amendResult);
+matchesRouter.post("/:id/result/confirm", requireAuth, requireLadderParticipant, matches.confirmResult);
+matchesRouter.post("/:id/result/reject", requireAuth, requireLadderParticipant, matches.rejectResult);
 
 export const adminMatchesRouter = Router();
 adminMatchesRouter.get("/pending", requireAuth, requireAdmin, matches.adminPendingMatches);

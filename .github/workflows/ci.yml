@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The root postinstall builds @tennisladder/shared, which api and web both import as a real
+      # package — without it neither typechecks.
+      - run: npm ci
+
+      # Prisma's generated client is a typecheck dependency for the API.
+      - run: npx prisma generate --schema api/prisma/schema.prisma
+
+      # There is no test runner in this repo; tsc --noEmit is the only automated signal.
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Build web
+        run: npm run build --workspace=@tennisladder/web
+        env:
+          VITE_API_BASE_URL: https://example.invalid/api
+
+      - name: Build API container image
+        run: docker build -f api/Dockerfile .

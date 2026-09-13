@@ -33,11 +33,19 @@ function withPublicPlayers<T extends { challenger: SelectedUser; opponent: Selec
 }
 
 export const listMatches = asyncHandler(async (req: Request, res: Response) => {
-  const filter = (req.query.filter as string | undefined) ?? "all";
-  const statusFilter: Prisma.MatchWhereInput =
-    filter === "completed"
+  // Scope (whose matches) and status are independent filters that combine.
+  const scope = req.query.scope as string | undefined;
+  const status = req.query.status as string | undefined;
+
+  const scopeWhere: Prisma.MatchWhereInput =
+    scope === "mine"
+      ? { OR: [{ challengerId: req.user!.id }, { opponentId: req.user!.id }] }
+      : {};
+
+  const statusWhere: Prisma.MatchWhereInput =
+    status === "completed"
       ? { status: MatchStatus.COMPLETED }
-      : filter === "pending"
+      : status === "pending"
         ? {
             status: {
               in: [
@@ -51,7 +59,7 @@ export const listMatches = asyncHandler(async (req: Request, res: Response) => {
         : {};
 
   const matches = await prisma.match.findMany({
-    where: statusFilter,
+    where: { ...scopeWhere, ...statusWhere },
     orderBy: { createdAt: "desc" },
     include: {
       challenger: { select: publicUserSelect },
@@ -99,7 +107,20 @@ const futureDateTime = z
   .datetime()
   .refine((value) => new Date(value).getTime() > Date.now(), {
     message: "Proposed date and time must be in the future",
-  });
+  })
+  // Checked in UTC, which is equivalent to local time here: every timezone offset in use is
+  // itself a whole number of quarter hours, so the 15-minute grid is the same in both.
+  .refine(
+    (value) => {
+      const date = new Date(value);
+      return (
+        date.getUTCMinutes() % 15 === 0 &&
+        date.getUTCSeconds() === 0 &&
+        date.getUTCMilliseconds() === 0
+      );
+    },
+    { message: "Match times must be on a 15-minute interval" },
+  );
 
 const proposeSchema = z.object({
   opponentId: z.string().min(1),
@@ -150,6 +171,12 @@ export const counterPropose = asyncHandler(async (req: Request, res: Response) =
 
 const cancelSchema = z.object({ comment: z.string().max(500).optional() });
 
+export const withdrawMatch = asyncHandler(async (req: Request, res: Response) => {
+  const { comment } = cancelSchema.parse(req.body ?? {});
+  const match = await matchService.withdrawMatch(req.params.id, req.user!.id, comment?.trim() || undefined);
+  res.json(match);
+});
+
 export const cancelMatch = asyncHandler(async (req: Request, res: Response) => {
   const { comment } = cancelSchema.parse(req.body ?? {});
   const match = await matchService.cancelMatch(req.params.id, req.user!.id, comment?.trim() || undefined);
@@ -166,11 +193,29 @@ export const declineMatch = asyncHandler(async (req: Request, res: Response) => 
   res.json(match);
 });
 
-const resultSchema = z.object({ outcome: z.enum(["WON", "LOST"]) });
+// Reported from the reporter's own point of view — the service resolves it to winner/loser.
+const resultSchema = z.object({ outcome: z.enum(["WON", "LOST", "TIED"]) });
 
-export const submitResult = asyncHandler(async (req: Request, res: Response) => {
+export const proposeResult = asyncHandler(async (req: Request, res: Response) => {
   const { outcome } = resultSchema.parse(req.body);
-  const match = await matchService.submitResult(req.params.id, req.user!.id, outcome);
+  const match = await matchService.proposeResult(req.params.id, req.user!.id, outcome);
+  res.json(match);
+});
+
+export const amendResult = asyncHandler(async (req: Request, res: Response) => {
+  const { outcome } = resultSchema.parse(req.body);
+  const match = await matchService.amendResult(req.params.id, req.user!.id, outcome);
+  res.json(match);
+});
+
+export const confirmResult = asyncHandler(async (req: Request, res: Response) => {
+  const match = await matchService.confirmResult(req.params.id, req.user!.id);
+  res.json(match);
+});
+
+export const rejectResult = asyncHandler(async (req: Request, res: Response) => {
+  const { comment } = cancelSchema.parse(req.body ?? {});
+  const match = await matchService.rejectResult(req.params.id, req.user!.id, comment?.trim() || undefined);
   res.json(match);
 });
 
