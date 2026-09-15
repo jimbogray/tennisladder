@@ -83,9 +83,13 @@ with its own managed identity.
   the other. Refresh cookies are host-only, so `api.staging.playmore.tennis` and
   `api.playmore.tennis` never see each other's.
 - **CORS** — each API accepts credentialed requests only from its own site.
-- **Email** — staging is provisioned without Communication Services, so it logs emails instead of
-  sending them. Never copy production data into staging while email is enabled there: reminder
-  jobs would message real players.
+- **Email** — staging is provisioned without Communication Services, so it doesn't send email.
+  Instead, `LOG_EMAIL_LINKS=true` makes the API log each unsent email's recipient, subject and
+  links (password reset, invite, result confirmation), so those flows can still be completed:
+  `az containerapp logs show -g tennisladder-staging-rg -n tennisladder-staging-api --follow`.
+  Those links are live credentials, which is why production never sets the flag. Never copy
+  production data into staging while email is enabled there: reminder jobs would message real
+  players.
 - **Search engines** — the staging deploy publishes a `robots.txt` that disallows indexing.
 
 ## Why the domain is load-bearing

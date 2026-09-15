@@ -246,11 +246,6 @@ async function issuePasswordReset(email: string): Promise<void> {
   ]);
 
   const resetUrl = `${env.webAppUrl}/reset-password/${token}`;
-  if (!env.azureCommunicationConnectionString && process.env.NODE_ENV !== "production") {
-    // Local dev has no email, so surface the link where the developer can click it.
-    console.info(`[passwordReset] email not configured; reset link for ${email}: ${resetUrl}`);
-  }
-
   const { subject, html } = renderPasswordResetEmail({
     recipientFirstName: user.firstName,
     resetUrl,

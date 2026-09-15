@@ -41,6 +41,13 @@ export const env = {
 
   azureCommunicationConnectionString: process.env.AZURE_COMMUNICATION_CONNECTION_STRING ?? "",
   emailFromAddress: process.env.EMAIL_FROM_ADDRESS ?? "ladder@example.com",
+  /**
+   * When email isn't configured, log the links an unsent email would have carried (password reset,
+   * invite, result confirmation) so those flows can still be completed. On by default for local dev;
+   * hosted environments run with NODE_ENV=production and must opt in, which only staging does. Has
+   * no effect once email is configured, so links bound for a real inbox never reach the logs.
+   */
+  logEmailLinks: process.env.LOG_EMAIL_LINKS ? process.env.LOG_EMAIL_LINKS === "true" : !isProduction,
 
   registrationCodeTtlHours: Number(process.env.REGISTRATION_CODE_TTL_HOURS ?? 48),
   passwordResetTtlMinutes: Number(process.env.PASSWORD_RESET_TTL_MINUTES ?? 60),
