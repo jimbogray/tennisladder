@@ -129,6 +129,8 @@ a:hover {
   align-items: center;
   gap: 0.25rem;
   flex-wrap: wrap;
+  /* Takes the bar's spare width, packing the links and account menu against the right edge. */
+  margin-left: auto;
 }
 
 .navbar a,
@@ -157,17 +159,112 @@ a:hover {
   font-weight: 700;
 }
 
-.navbar-logout {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: var(--white);
-  padding: 0.45rem 0.9rem;
-  font-weight: 600;
+/* Initials avatar — the account portrait, since users have no photo. */
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--ball-yellow);
+  color: var(--court-green-dark);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  user-select: none;
 }
 
-.navbar-logout:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.6);
+.avatar-small {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 0.85rem;
+}
+
+.avatar-large {
+  width: 5rem;
+  height: 5rem;
+  font-size: 1.75rem;
+}
+
+/* Account menu */
+
+.user-menu {
+  position: relative;
+}
+
+.user-menu-trigger {
+  display: inline-flex;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45);
+}
+
+.user-menu-trigger:hover,
+.user-menu-trigger[aria-expanded="true"] {
+  background: transparent;
+  box-shadow: 0 0 0 2px var(--white);
+}
+
+.user-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  /* Sized to the email address where the screen allows, so it doesn't break mid-word. */
+  width: max-content;
+  min-width: 14rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.5rem;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 24px rgba(11, 61, 36, 0.2);
+}
+
+.user-menu-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.65rem 0.65rem;
+  margin-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-menu-identity strong {
+  color: var(--court-green-dark);
+}
+
+.user-menu-identity span {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.user-menu-panel a,
+.user-menu-logout {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+.user-menu-panel a:hover,
+.user-menu-logout:hover {
+  background: rgba(30, 122, 60, 0.08);
+  color: var(--court-green-dark);
+  text-decoration: none;
+}
+
+.user-menu-logout {
+  background: transparent;
+  box-shadow: none;
 }
 
 /* Hamburger. The breakpoint is set just above the width the nav needs to sit on one row with
@@ -192,6 +289,8 @@ a:hover {
 @media (max-width: 48rem) {
   .navbar-toggle {
     display: inline-flex;
+    /* The links are out of flow here, so the toggle takes over pushing everything right. */
+    margin-left: auto;
   }
 
   /* Drops over the page rather than pushing it down. The navbar is position:sticky, which is
@@ -219,10 +318,6 @@ a:hover {
   .navbar-links a {
     padding: 0.6rem 0.85rem;
     border-radius: var(--radius);
-  }
-
-  .navbar-logout {
-    margin-top: 0.35rem;
   }
 }
 
@@ -886,4 +981,61 @@ gmp-place-autocomplete {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* Profile page */
+
+.profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 0 0 2rem;
+  padding: 1.5rem;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-width: 560px;
+}
+
+.profile-summary h2 {
+  margin: 0 0 0.6rem;
+}
+
+.profile-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1.25rem;
+  margin: 0;
+}
+
+.profile-details dt {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.profile-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-page [role="status"] {
+  background: rgba(30, 122, 60, 0.08);
+  color: var(--court-green-dark);
+  border: 1px solid rgba(30, 122, 60, 0.25);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+@media (max-width: 30rem) {
+  .profile-summary {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

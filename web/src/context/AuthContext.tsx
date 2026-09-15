@@ -7,6 +7,8 @@ export interface AuthContextValue {
   user: SessionUserDto | null;
   isLoading: boolean;
   setSession: (user: SessionUserDto, accessToken: string) => void;
+  /** Replaces the signed-in user's details (e.g. after a profile edit) without touching the token. */
+  updateUser: (user: SessionUserDto) => void;
   logout: () => Promise<void>;
 }
 
@@ -40,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, setSession, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, setSession, updateUser: setUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

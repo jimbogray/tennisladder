@@ -1,11 +1,10 @@
 import { z } from "zod";
 import type { Request, Response } from "express";
-import type { User } from "@prisma/client";
-import type { SessionUserDto } from "@tennisladder/shared";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { hashPassword, verifyPassword } from "../auth/passwordUtils.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../auth/authConfig.js";
+import { toSessionUserDto, type SessionUser } from "../auth/sessionUser.js";
 import { generateOpaqueToken, hashToken } from "../services/tokenService.js";
 import {
   accountFieldsFor,
@@ -15,23 +14,6 @@ import {
 import { sendEmail } from "../services/emailService.js";
 import { renderPasswordResetEmail } from "../emails/templates/passwordReset.js";
 import { env } from "../config/env.js";
-
-// Accept a User without the (globally omitted) passwordHash — these helpers never read it.
-type SessionUser = Omit<User, "passwordHash">;
-
-function toSessionUserDto(user: SessionUser): SessionUserDto {
-  return {
-    id: user.id,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    role: user.role,
-    participatesInLadder: user.participatesInLadder,
-    points: user.points,
-    email: user.email,
-    ustaRating: user.ustaRating?.toString() ?? null,
-    profileCompletedAt: user.profileCompletedAt?.toISOString() ?? null,
-  };
-}
 
 const refreshCookieOptions = {
   httpOnly: true,

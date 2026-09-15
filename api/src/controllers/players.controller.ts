@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
+import { toSessionUserDto } from "../auth/sessionUser.js";
 
 export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
   const players = await prisma.user.findMany({
@@ -78,7 +80,25 @@ export const listChallengeable = asyncHandler(async (req: Request, res: Response
 
 export const me = asyncHandler(async (req: Request, res: Response) => {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id } });
-  res.json(user);
+  res.json(toSessionUserDto(user));
+});
+
+const nameField = (label: string) =>
+  z.string().trim().min(1, `${label} is required`).max(100, `${label} must be 100 characters or fewer`);
+
+const updateProfileSchema = z.object({
+  firstName: nameField("First name"),
+  lastName: nameField("Last name"),
+});
+
+/** Name is the only self-editable field; email and role changes need a different flow. */
+export const updateMe = asyncHandler(async (req: Request, res: Response) => {
+  const { firstName, lastName } = updateProfileSchema.parse(req.body);
+  const user = await prisma.user.update({
+    where: { id: req.user!.id },
+    data: { firstName, lastName },
+  });
+  res.json(toSessionUserDto(user));
 });
 
 export const adjustPoints = asyncHandler(async (_req: Request, res: Response) => {
