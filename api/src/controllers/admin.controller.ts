@@ -118,6 +118,7 @@ function toTeamMemberDto(user: {
 
 export const listTeamMembers = asyncHandler(async (_req: Request, res: Response) => {
   const users = await prisma.user.findMany({
+    where: { removedAt: null },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     select: teamMemberSelect,
   });
@@ -132,6 +133,19 @@ const OPEN_MATCH_STATUSES = [
   MatchStatus.RESULT_DISPUTED,
 ];
 
+function countOpenMatches(userId: string) {
+  return prisma.match.count({
+    where: {
+      status: { in: OPEN_MATCH_STATUSES },
+      OR: [{ challengerId: userId }, { opponentId: userId }],
+    },
+  });
+}
+
+function unfinishedMatchesMessage(firstName: string, openMatches: number, action: string) {
+  return `${firstName} has ${openMatches} unfinished ${openMatches === 1 ? "match" : "matches"}. Finish or cancel ${openMatches === 1 ? "it" : "them"} before ${action}.`;
+}
+
 const updateAccountTypeSchema = z.object({
   accountType: z.nativeEnum(AccountType),
 });
@@ -145,7 +159,10 @@ export const updateTeamMemberAccountType = asyncHandler(async (req: Request, res
   const { accountType } = updateAccountTypeSchema.parse(req.body);
   const { role, participatesInLadder } = accountFieldsFor(accountType);
 
-  const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: teamMemberSelect });
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id, removedAt: null },
+    select: teamMemberSelect,
+  });
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
@@ -158,15 +175,10 @@ export const updateTeamMemberAccountType = asyncHandler(async (req: Request, res
   }
 
   if (user.participatesInLadder && !participatesInLadder) {
-    const openMatches = await prisma.match.count({
-      where: {
-        status: { in: OPEN_MATCH_STATUSES },
-        OR: [{ challengerId: user.id }, { opponentId: user.id }],
-      },
-    });
+    const openMatches = await countOpenMatches(user.id);
     if (openMatches > 0) {
       res.status(409).json({
-        error: `${user.firstName} has ${openMatches} unfinished ${openMatches === 1 ? "match" : "matches"}. Finish or cancel ${openMatches === 1 ? "it" : "them"} before taking them off the ladder.`,
+        error: unfinishedMatchesMessage(user.firstName, openMatches, "taking them off the ladder"),
       });
       return;
     }
@@ -178,4 +190,49 @@ export const updateTeamMemberAccountType = asyncHandler(async (req: Request, res
     select: teamMemberSelect,
   });
   res.json(toTeamMemberDto(updated));
+});
+
+/**
+ * Removes a user from the team. This is a soft delete (sets removedAt) so their completed matches
+ * stay in everyone else's history. Their sessions and any outstanding password reset links are
+ * revoked in the same transaction, so they can't get a new access token; one they already hold
+ * keeps working until it expires (at most JWT_ACCESS_TTL_MINUTES).
+ */
+export const removeTeamMember = asyncHandler(async (req: Request, res: Response) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id, removedAt: null },
+    select: teamMemberSelect,
+  });
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  // Also guarantees at least one admin always remains: whoever is making the change is one.
+  if (user.id === req.user!.id) {
+    res.status(409).json({ error: "You can't remove yourself from the team" });
+    return;
+  }
+
+  const openMatches = await countOpenMatches(user.id);
+  if (openMatches > 0) {
+    res.status(409).json({
+      error: unfinishedMatchesMessage(user.firstName, openMatches, "removing them from the team"),
+    });
+    return;
+  }
+
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { removedAt: now } }),
+    prisma.refreshToken.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: now },
+    }),
+    prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, usedAt: null, expiresAt: { gt: now } },
+      data: { expiresAt: now },
+    }),
+  ]);
+  res.status(204).send();
 });

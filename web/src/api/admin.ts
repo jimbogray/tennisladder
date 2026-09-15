@@ -56,3 +56,8 @@ export function updateTeamMemberAccountType(id: string, accountType: AccountType
     body: JSON.stringify({ accountType }),
   });
 }
+
+/** Soft-removes a user: they're signed out and hidden, but their past matches are kept. */
+export function removeTeamMember(id: string) {
+  return apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" });
+}

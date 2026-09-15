@@ -6,7 +6,7 @@ import { toSessionUserDto } from "../auth/sessionUser.js";
 
 export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
   const players = await prisma.user.findMany({
-    where: { participatesInLadder: true },
+    where: { participatesInLadder: true, removedAt: null },
     orderBy: { points: "desc" },
     select: { id: true, firstName: true, lastName: true, points: true, ustaRating: true },
   });
@@ -63,7 +63,7 @@ export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
 
 export const listChallengeable = asyncHandler(async (req: Request, res: Response) => {
   const players = await prisma.user.findMany({
-    where: { participatesInLadder: true, id: { not: req.user?.id } },
+    where: { participatesInLadder: true, removedAt: null, id: { not: req.user?.id } },
     orderBy: { firstName: "asc" },
     select: {
       id: true,
