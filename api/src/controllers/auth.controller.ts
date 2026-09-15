@@ -114,6 +114,11 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
+  // Checked after the password, so only someone who knows it learns the account was removed.
+  if (user.removedAt) {
+    res.status(403).json({ error: "This account has been removed from the team" });
+    return;
+  }
 
   await issueSession(res, user);
 });
@@ -158,8 +163,9 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
+  // Removal revokes refresh tokens too; checking removedAt here as well doesn't rely on that alone.
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-  if (!user) {
+  if (!user || user.removedAt) {
     res.clearCookie("refreshToken", refreshCookieOptions);
     res.status(401).json({ error: "Invalid or expired session" });
     return;
@@ -221,7 +227,7 @@ export const requestPasswordReset = asyncHandler(async (req: Request, res: Respo
 
 async function issuePasswordReset(email: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) return;
+  if (!user || user.removedAt) return;
 
   const now = new Date();
   const recent = await prisma.passwordResetToken.findFirst({

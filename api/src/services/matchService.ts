@@ -17,8 +17,16 @@ export async function proposeMatch(input: ProposeMatchInput) {
     throw new MatchValidationError("You can't challenge yourself");
   }
 
-  const opponent = await prisma.user.findUnique({ where: { id: input.opponentId } });
-  if (!opponent) {
+  const [challenger, opponent] = await Promise.all([
+    prisma.user.findUnique({ where: { id: input.challengerId }, select: { removedAt: true } }),
+    prisma.user.findUnique({ where: { id: input.opponentId } }),
+  ]);
+  // A removed player's access token outlives their removal by a few minutes; don't let them use
+  // that window to open a match nobody can finish.
+  if (!challenger || challenger.removedAt) {
+    throw new MatchValidationError("Your account is no longer on the team");
+  }
+  if (!opponent || opponent.removedAt) {
     throw new MatchValidationError("Opponent not found");
   }
   // Coach-admins are on the roster but never participate in the ladder, so they can't be

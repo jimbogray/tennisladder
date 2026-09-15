@@ -83,6 +83,11 @@ model User {
 
   points Int @default(0)
 
+  // Set when an admin removes the user from the team. A soft delete: the row stays so the matches,
+  // events and adjustments that reference it keep their history, but the user can no longer sign
+  // in and is left out of the team, the ladder and the challenge picker.
+  removedAt DateTime?
+
   registrationCodeId String?           @unique
   registrationCode   RegistrationCode? @relation(fields: [registrationCodeId], references: [id])
 

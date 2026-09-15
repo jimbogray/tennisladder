@@ -16,3 +16,4 @@ adminRegistrationCodesRouter.post(
 export const adminUsersRouter = Router();
 adminUsersRouter.get("/", requireAuth, requireAdmin, admin.listTeamMembers);
 adminUsersRouter.patch("/:id/account-type", requireAuth, requireAdmin, admin.updateTeamMemberAccountType);
+adminUsersRouter.delete("/:id", requireAuth, requireAdmin, admin.removeTeamMember);
