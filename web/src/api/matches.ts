@@ -1,4 +1,5 @@
 import type {
+  AcceptMatchRequest,
   CounterProposeRequest,
   MatchDetailDto,
   MatchDto,
@@ -51,8 +52,8 @@ export function cancelMatch(id: string, comment?: string) {
   });
 }
 
-export function acceptMatch(id: string) {
-  return apiFetch<MatchDto>(`/matches/${id}/accept`, { method: "POST" });
+export function acceptMatch(id: string, body: AcceptMatchRequest = {}) {
+  return apiFetch<MatchDto>(`/matches/${id}/accept`, { method: "POST", body: JSON.stringify(body) });
 }
 
 export function declineMatch(id: string) {

@@ -29,6 +29,20 @@ export interface UpdateProfileRequest {
   lastName: string;
 }
 
+// A place the user travels to matches from. Only ever returned to its owner.
+export interface UserAddressDto {
+  id: string;
+  // "Home", "Office", or a label the user typed.
+  label: string;
+  address: string;
+  createdAt: string;
+}
+
+export interface CreateUserAddressRequest {
+  label: string;
+  address: string;
+}
+
 export interface LadderEntryDto {
   userId: string;
   firstName: string;
@@ -118,19 +132,34 @@ export interface MatchDto {
 export interface MatchDetailDto extends MatchDto {
   proposedLocation: LocationDto;
   events: MatchEventDto[];
+  // Where the *requesting* user said they're coming from; null if they haven't said, or aren't
+  // one of the players. The other player's choice is never included.
+  myTravelOrigin: UserAddressDto | null;
 }
 
-export interface ProposeMatchRequest {
+// On every request that lets a player state where they're travelling from: omit to leave the
+// current choice alone, null to clear it, or the id of one of your own saved addresses.
+export interface TravelOriginField {
+  travelOriginAddressId?: string | null;
+}
+
+export interface ProposeMatchRequest extends TravelOriginField {
   opponentId: string;
   proposedDateTime: string;
   proposedLocationId: string;
   proposedComment?: string;
 }
 
-export interface CounterProposeRequest {
+export interface CounterProposeRequest extends TravelOriginField {
   proposedDateTime: string;
   proposedLocationId: string;
   proposedComment?: string;
+}
+
+export type AcceptMatchRequest = TravelOriginField;
+
+export interface SetTravelOriginRequest {
+  addressId: string | null;
 }
 
 export interface SubmitResultRequest {

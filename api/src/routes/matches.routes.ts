@@ -17,6 +17,8 @@ matchesRouter.post("/:id/accept", requireAuth, requireLadderParticipant, matches
 matchesRouter.post("/:id/decline", requireAuth, requireLadderParticipant, matches.declineMatch);
 matchesRouter.post("/:id/withdraw", requireAuth, requireLadderParticipant, matches.withdrawMatch);
 matchesRouter.post("/:id/cancel", requireAuth, requireLadderParticipant, matches.cancelMatch);
+// Private to the caller, so it isn't a negotiation step and needs no turn — just being a player.
+matchesRouter.put("/:id/travel-origin", requireAuth, matches.setTravelOrigin);
 matchesRouter.post("/:id/result", requireAuth, requireLadderParticipant, matches.proposeResult);
 matchesRouter.post("/:id/result/amend", requireAuth, requireLadderParticipant, matches.amendResult);
 matchesRouter.post("/:id/result/confirm", requireAuth, requireLadderParticipant, matches.confirmResult);

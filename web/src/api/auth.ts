@@ -1,4 +1,4 @@
-import type { SessionUserDto } from "@tennisladder/shared";
+import type { CreateUserAddressRequest, SessionUserDto } from "@tennisladder/shared";
 import { apiFetch } from "./client.js";
 
 export interface LoginRequest {
@@ -13,6 +13,7 @@ export interface RegisterRequest {
   password: string;
   ustaRating?: string;
   registrationCode: string;
+  addresses?: CreateUserAddressRequest[];
 }
 
 export function login(body: LoginRequest) {

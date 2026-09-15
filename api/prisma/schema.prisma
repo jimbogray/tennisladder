@@ -101,8 +101,53 @@ model User {
   pointsAdjustments PointsAdjustment[]  @relation("AdjustedUser")
   adjustmentsMade   PointsAdjustment[]  @relation("AdjustingAdmin")
   registrationCodesCreated RegistrationCode[] @relation("RegistrationCodeCreator")
+  addresses                UserAddress[]
+  matchTravelOrigins       MatchTravelOrigin[]
 
   @@map("users")
+}
+
+// A place the user travels to matches from (home, office, …), kept for driving directions and
+// travel alerts. Private to its owner: never returned to other players, or to admins.
+model UserAddress {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // "Home", "Office", or whatever the user typed. Unique per user so a picker never shows two
+  // identical choices; the API also compares case-insensitively.
+  label   String
+  // Free-text postal address, normally filled in from Google Places autocomplete.
+  address String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  matchTravelOrigins MatchTravelOrigin[]
+
+  @@unique([userId, label])
+  @@map("user_addresses")
+}
+
+// Where one player is coming from for one match. A separate table rather than columns on Match
+// because match rows are shown to both players (and everyone else), and this is private to the
+// player who set it. Deleting the address removes the choice rather than leaving a dangling one.
+model MatchTravelOrigin {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  // Always the address's owner; kept here so each player has at most one origin per match.
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addressId String
+  address   UserAddress @relation(fields: [addressId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([matchId, userId])
+  @@index([addressId])
+  @@map("match_travel_origins")
 }
 
 model RegistrationCode {
@@ -192,8 +237,9 @@ model Match {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  events       MatchEvent[]
-  resultTokens MatchResultToken[]
+  events        MatchEvent[]
+  resultTokens  MatchResultToken[]
+  travelOrigins MatchTravelOrigin[]
 
   @@index([status])
   @@map("matches")

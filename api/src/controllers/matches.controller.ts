@@ -4,6 +4,7 @@ import { Prisma, MatchStatus } from "@prisma/client";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import * as matchService from "../services/matchService.js";
+import { toUserAddressDto } from "../services/addressService.js";
 
 // Joined onto matches so the UI can show player names. Deliberately narrow: selecting the whole
 // User row would ship every player's email address to every other player.
@@ -95,8 +96,16 @@ export const getMatch = asyncHandler(async (req: Request, res: Response) => {
       events: { orderBy: { createdAt: "asc" } },
     },
   });
-  res.json(withPublicPlayers(match));
+  // Only ever the requester's own choice — the other player's travel origin stays private.
+  const myTravelOrigin = await matchService.getTravelOrigin(match.id, req.user!.id);
+  res.json({
+    ...withPublicPlayers(match),
+    myTravelOrigin: myTravelOrigin ? toUserAddressDto(myTravelOrigin) : null,
+  });
 });
+
+// Omitted leaves the player's current choice alone; null clears it.
+const travelOriginAddressId = z.string().min(1).nullable().optional();
 
 /**
  * A match can only be arranged for a slot that hasn't happened yet. Shared by the propose and
@@ -127,6 +136,7 @@ const proposeSchema = z.object({
   proposedDateTime: futureDateTime,
   proposedLocationId: z.string().min(1),
   proposedComment: z.string().optional(),
+  travelOriginAddressId,
 });
 
 export const proposeMatch = asyncHandler(async (req: Request, res: Response) => {
@@ -137,6 +147,7 @@ export const proposeMatch = asyncHandler(async (req: Request, res: Response) => 
     proposedDateTime: new Date(body.proposedDateTime),
     proposedLocationId: body.proposedLocationId,
     proposedComment: body.proposedComment,
+    travelOriginAddressId: body.travelOriginAddressId,
   });
   res.status(201).json(match);
 });
@@ -147,6 +158,7 @@ const proposalSchema = z.object({
   proposedDateTime: futureDateTime,
   proposedLocationId: z.string().min(1),
   proposedComment: z.string().optional(),
+  travelOriginAddressId,
 });
 
 export const amendProposal = asyncHandler(async (req: Request, res: Response) => {
@@ -155,6 +167,7 @@ export const amendProposal = asyncHandler(async (req: Request, res: Response) =>
     proposedDateTime: new Date(body.proposedDateTime),
     proposedLocationId: body.proposedLocationId,
     proposedComment: body.proposedComment,
+    travelOriginAddressId: body.travelOriginAddressId,
   });
   res.json(match);
 });
@@ -165,6 +178,7 @@ export const counterPropose = asyncHandler(async (req: Request, res: Response) =
     proposedDateTime: new Date(body.proposedDateTime),
     proposedLocationId: body.proposedLocationId,
     proposedComment: body.proposedComment,
+    travelOriginAddressId: body.travelOriginAddressId,
   });
   res.json(match);
 });
@@ -183,9 +197,21 @@ export const cancelMatch = asyncHandler(async (req: Request, res: Response) => {
   res.json(match);
 });
 
+const acceptSchema = z.object({ travelOriginAddressId });
+
 export const acceptMatch = asyncHandler(async (req: Request, res: Response) => {
-  const match = await matchService.acceptMatch(req.params.id, req.user!.id);
+  const body = acceptSchema.parse(req.body ?? {});
+  const match = await matchService.acceptMatch(req.params.id, req.user!.id, body.travelOriginAddressId);
   res.json(match);
+});
+
+const setTravelOriginSchema = z.object({ addressId: z.string().min(1).nullable() });
+
+/** Change where you're coming from for an upcoming match, e.g. after it's been scheduled. */
+export const setTravelOrigin = asyncHandler(async (req: Request, res: Response) => {
+  const { addressId } = setTravelOriginSchema.parse(req.body);
+  const origin = await matchService.setTravelOrigin(req.params.id, req.user!.id, addressId);
+  res.json({ myTravelOrigin: origin ? toUserAddressDto(origin) : null });
 });
 
 export const declineMatch = asyncHandler(async (req: Request, res: Response) => {

@@ -3,6 +3,9 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { register } from "../api/auth.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { ApiError } from "../api/client.js";
+import type { CreateUserAddressRequest } from "@tennisladder/shared";
+import { SavedAddressForm } from "../components/SavedAddressForm.js";
+import { SavedAddressList } from "../components/SavedAddressList.js";
 
 // USTA NTRP ratings run from 2.5 to 7.0 in 0.5 increments.
 const USTA_RATINGS = Array.from({ length: 10 }, (_, i) => (2.5 + i * 0.5).toFixed(1));
@@ -18,6 +21,8 @@ export function RegisterPage() {
     ustaRating: "",
     registrationCode: (searchParams.get("code") ?? "").replace(/\D/g, "").slice(0, 4),
   });
+  // Held locally until the account exists; saved along with it.
+  const [addresses, setAddresses] = useState<CreateUserAddressRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { setSession } = useAuth();
   const navigate = useNavigate();
@@ -26,7 +31,7 @@ export function RegisterPage() {
     e.preventDefault();
     setError(null);
     try {
-      const { user, accessToken } = await register(form);
+      const { user, accessToken } = await register({ ...form, addresses });
       setSession(user, accessToken);
       navigate("/ladder");
     } catch (err) {
@@ -75,6 +80,22 @@ export function RegisterPage() {
             onChange={(e) => set("registrationCode", e.target.value.replace(/\D/g, ""))}
           />
           <small id="registration-code-hint">4-digit code from your club admin.</small>
+          <div className="register-addresses">
+            <h2>Where do you travel from?</h2>
+            <small>
+              Optional. Save home, office or anywhere else you head to matches from. Only you can
+              see these, and you can change them later on your profile.
+            </small>
+            <SavedAddressList
+              addresses={addresses.map((a) => ({ key: a.label, ...a }))}
+              onRemove={(label) => setAddresses((prev) => prev.filter((a) => a.label !== label))}
+            />
+            <SavedAddressForm
+              idPrefix="register-address"
+              existingLabels={addresses.map((a) => a.label)}
+              onAdd={(input) => setAddresses((prev) => [...prev, input])}
+            />
+          </div>
           <button type="submit">Register</button>
           {/* TODO: "Continue with Google" button linking to GET /api/auth/google */}
           <p>
