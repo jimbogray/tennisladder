@@ -136,6 +136,14 @@ model Location {
   address    String?
   archivedAt DateTime?
 
+  // Geocoding cache for the weather forecast, filled lazily on first forecast request.
+  // `geocodedAddress` is the address the coordinates were looked up from: when it no longer
+  // matches `address` the cache is stale. Coordinates are null (with `geocodedAddress` set) when
+  // the lookup found nothing, so an unfindable address isn't retried on every request.
+  latitude        Float?
+  longitude       Float?
+  geocodedAddress String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

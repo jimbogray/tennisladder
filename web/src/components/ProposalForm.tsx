@@ -3,6 +3,7 @@ import type { LocationDto } from "@tennisladder/shared";
 import { LocationPicker } from "./LocationPicker.js";
 import { toDateTimeLocal } from "../lib/dateTime.js";
 import { MatchDateTimePicker } from "./MatchDateTimePicker.js";
+import { WeatherForecast } from "./WeatherForecast.js";
 
 /** Shared editor for a match proposal — used to amend your own offer and to counter theirs. */
 export function ProposalForm({
@@ -49,6 +50,7 @@ export function ProposalForm({
       <MatchDateTimePicker id="proposal-datetime" value={dateTime} onChange={setDateTime} />
       <label htmlFor="proposal-location">Location</label>
       <LocationPicker locations={locations} value={locationId} onChange={setLocationId} />
+      <WeatherForecast locationId={locationId} dateTime={dateTime} />
       <textarea
         placeholder="Optional comment"
         value={comment}

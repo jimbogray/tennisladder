@@ -41,6 +41,36 @@ export interface LocationDto {
   archivedAt: string | null;
 }
 
+// Weather forecast for a location (GET /api/locations/:id/forecast). Always metric — the client
+// converts for display. Weather codes are WMO weather interpretation codes.
+export interface ForecastDayDto {
+  // Calendar date local to the location, YYYY-MM-DD.
+  date: string;
+  weatherCode: number;
+  temperatureMaxC: number;
+  temperatureMinC: number;
+  // Null where the provider has no precipitation model that far out.
+  precipitationProbabilityMax: number | null;
+}
+
+export interface ForecastHourDto {
+  // ISO instant at the top of the hour.
+  time: string;
+  weatherCode: number;
+  temperatureC: number;
+  precipitationProbability: number | null;
+  windSpeedKmh: number;
+  // False between sunset and sunrise, so clear skies can be shown as night rather than sun.
+  isDay: boolean;
+}
+
+// Without `at` the forecast is a daily outlook; with `at` it's the hours around that time.
+// NO_ADDRESS: the location has no address to look up. ADDRESS_NOT_FOUND: the address couldn't be
+// geocoded. OUT_OF_RANGE: `at` is outside the provider's forecast horizon.
+export type LocationForecastDto =
+  | { status: "AVAILABLE"; days: ForecastDayDto[]; hours: ForecastHourDto[] }
+  | { status: "NO_ADDRESS" | "ADDRESS_NOT_FOUND" | "OUT_OF_RANGE" };
+
 export interface MatchEventDto {
   id: string;
   type: MatchEventType;

@@ -8,6 +8,7 @@ import { OpponentPicker } from "../components/OpponentPicker.js";
 import { LocationPicker } from "../components/LocationPicker.js";
 import { ApiError } from "../api/client.js";
 import { MatchDateTimePicker } from "../components/MatchDateTimePicker.js";
+import { WeatherForecast } from "../components/WeatherForecast.js";
 
 export function NewMatchPage() {
   const { data: players } = useQuery({ queryKey: ["players", "challengeable"], queryFn: fetchChallengeablePlayers });
@@ -49,6 +50,7 @@ export function NewMatchPage() {
         onChange={setProposedDateTime}
       />
       <LocationPicker locations={locations ?? []} value={proposedLocationId} onChange={setProposedLocationId} />
+      <WeatherForecast locationId={proposedLocationId} dateTime={proposedDateTime} />
       <textarea
         placeholder="Optional comment"
         value={proposedComment}
