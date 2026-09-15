@@ -56,10 +56,10 @@ export function ProposalForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <label htmlFor="proposal-datetime">Date and time</label>
-      <MatchDateTimePicker id="proposal-datetime" value={dateTime} onChange={setDateTime} />
       <label htmlFor="proposal-location">Location</label>
       <LocationPicker locations={locations} value={locationId} onChange={setLocationId} />
+      <label htmlFor="proposal-datetime">Date and time</label>
+      <MatchDateTimePicker id="proposal-datetime" value={dateTime} onChange={setDateTime} />
       <WeatherForecast locationId={locationId} dateTime={dateTime} />
       <TravelOriginPicker
         id="proposal-travel-origin"

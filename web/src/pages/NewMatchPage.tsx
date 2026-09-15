@@ -55,12 +55,12 @@ export function NewMatchPage() {
       <h1>Propose a Challenge</h1>
       {error && <p role="alert">{error}</p>}
       <OpponentPicker players={players ?? []} value={opponentId} onChange={setOpponentId} />
+      <LocationPicker locations={locations ?? []} value={proposedLocationId} onChange={setProposedLocationId} />
       <MatchDateTimePicker
         id="proposed-datetime"
         value={proposedDateTime}
         onChange={setProposedDateTime}
       />
-      <LocationPicker locations={locations ?? []} value={proposedLocationId} onChange={setProposedLocationId} />
       <WeatherForecast locationId={proposedLocationId} dateTime={proposedDateTime} />
       <TravelOriginPicker
         id="new-match-travel-origin"
