@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { login } from "../api/auth.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { ApiError } from "../api/client.js";
+import { PasswordInput } from "../components/PasswordInput.js";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -30,9 +31,9 @@ export function LoginPage() {
           <h1>Log in</h1>
           {error && <p role="alert">{error}</p>}
           <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input
-            type="password"
+          <PasswordInput
             placeholder="Password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
