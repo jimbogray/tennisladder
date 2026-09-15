@@ -655,6 +655,63 @@ tbody tr.row-me td:first-child {
   font-weight: 600;
 }
 
+/* Team */
+
+.team-type {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.team-type select {
+  flex: 1;
+  min-width: 11rem;
+}
+
+/* Square, icon-only commit button that matches the dropdown's height. */
+.team-commit {
+  flex: none;
+  align-self: stretch;
+  width: 2.75rem;
+  padding: 0;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+/* Addresses like opp-ff95979a@example.com have no natural break points. */
+.team-email,
+.team-email-inline {
+  overflow-wrap: anywhere;
+}
+
+.team-email-inline {
+  display: none;
+}
+
+/* On a phone there isn't room for three columns: the email moves under the name instead. */
+@media (max-width: 40rem) {
+  .team-table th,
+  .team-table td {
+    padding: 0.6rem 0.5rem;
+  }
+
+  .team-table .team-email {
+    display: none;
+  }
+
+  .team-email-inline {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.82rem;
+    font-weight: 400;
+    color: var(--ink-soft);
+  }
+
+  .team-type select {
+    min-width: 0;
+  }
+}
+
 /* Locations */
 
 .location-list {

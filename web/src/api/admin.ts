@@ -37,3 +37,22 @@ export function expireRegistrationCode(id: string) {
     method: "POST",
   });
 }
+
+export interface TeamMemberDto {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  accountType: AccountType;
+}
+
+export function fetchTeamMembers() {
+  return apiFetch<TeamMemberDto[]>("/admin/users");
+}
+
+export function updateTeamMemberAccountType(id: string, accountType: AccountType) {
+  return apiFetch<TeamMemberDto>(`/admin/users/${id}/account-type`, {
+    method: "PATCH",
+    body: JSON.stringify({ accountType }),
+  });
+}

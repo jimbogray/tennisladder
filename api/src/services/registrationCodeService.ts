@@ -57,6 +57,15 @@ export function accountFieldsFor(accountType: AccountType): {
   }
 }
 
+/**
+ * The inverse of {@link accountFieldsFor}, for showing an existing user's type. A PLAYER who has
+ * left the ladder isn't something an invite can create; it reads as PLAYER here.
+ */
+export function accountTypeFor(user: { role: UserRole; participatesInLadder: boolean }): AccountType {
+  if (user.role === "PLAYER") return "PLAYER";
+  return user.participatesInLadder ? "PLAYER_ADMIN" : "ADMIN";
+}
+
 /** Thrown when a registration code can't be redeemed. Callers should surface this as a 400. */
 export class RegistrationCodeError extends Error {}
 
