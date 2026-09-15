@@ -12,3 +12,7 @@ adminRegistrationCodesRouter.post(
   requireAdmin,
   admin.expireRegistrationCode,
 );
+
+export const adminUsersRouter = Router();
+adminUsersRouter.get("/", requireAuth, requireAdmin, admin.listTeamMembers);
+adminUsersRouter.patch("/:id/account-type", requireAuth, requireAdmin, admin.updateTeamMemberAccountType);

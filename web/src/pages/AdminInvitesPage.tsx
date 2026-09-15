@@ -9,14 +9,7 @@ import {
   type RegistrationCodeDto,
 } from "../api/admin.js";
 import { ApiError } from "../api/client.js";
-
-const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  PLAYER: "Player",
-  ADMIN: "Admin",
-  PLAYER_ADMIN: "Player and Admin",
-};
-
-const ACCOUNT_TYPES: AccountType[] = [AccountType.PLAYER, AccountType.ADMIN, AccountType.PLAYER_ADMIN];
+import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPES } from "../lib/accountTypes.js";
 
 function statusOf(c: RegistrationCodeDto): "active" | "used" | "expired" {
   if (c.usedAt) return "used";

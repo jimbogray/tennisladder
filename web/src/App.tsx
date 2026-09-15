@@ -15,6 +15,7 @@ import { AdminNegotiationsPage } from "./pages/AdminNegotiationsPage.js";
 import { LocationsPage } from "./pages/LocationsPage.js";
 import { AdminPlayersPage } from "./pages/AdminPlayersPage.js";
 import { AdminInvitesPage } from "./pages/AdminInvitesPage.js";
+import { AdminTeamPage } from "./pages/AdminTeamPage.js";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage.js";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage.js";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage.js";
@@ -67,6 +68,14 @@ export function App() {
           element={
             <RequireAdmin>
               <AdminPlayersPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/team"
+          element={
+            <RequireAdmin>
+              <AdminTeamPage />
             </RequireAdmin>
           }
         />

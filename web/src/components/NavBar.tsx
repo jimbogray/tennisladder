@@ -6,6 +6,7 @@ const LINKS = [
   { to: "/ladder", label: "Ladder", adminOnly: false },
   { to: "/matches", label: "Matches", adminOnly: false },
   { to: "/locations", label: "Locations", adminOnly: false },
+  { to: "/admin/team", label: "Team", adminOnly: true },
   { to: "/admin/invites", label: "Invites", adminOnly: true },
 ];
 
