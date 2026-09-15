@@ -190,6 +190,11 @@ if has_secret acs-connection || [ -n "${ACS_CONNECTION_STRING:-}" ]; then
   ENV_VARS+=("AZURE_COMMUNICATION_CONNECTION_STRING=secretref:acs-connection")
   ENV_VARS+=("EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-ladder@${DOMAIN}}")
 fi
+# Staging sends no email, so without its links in the logs nobody there could reset a password or
+# follow an invite. Production never gets this; the API also ignores it once email is configured.
+if [ "$ENVIRONMENT" = "staging" ]; then
+  ENV_VARS+=("LOG_EMAIL_LINKS=true")
+fi
 info "Setting app configuration (WEB_APP_URL=${SITE_URL})"
 run az containerapp update --resource-group "$RG" --name "$API_APP" \
   --set-env-vars "${ENV_VARS[@]}" --output none
