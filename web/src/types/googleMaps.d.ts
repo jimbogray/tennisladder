@@ -16,6 +16,8 @@ interface GooglePlaceSelectEvent extends Event {
 
 interface HTMLElementEventMap {
   "gmp-select": GooglePlaceSelectEvent;
+  // Fired when a request to Google is refused (e.g. the key doesn't allow this site's referrer).
+  "gmp-error": Event;
 }
 
 declare namespace google.maps {
