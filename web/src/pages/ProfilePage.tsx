@@ -1,8 +1,66 @@
 import { useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { updateMyProfile } from "../api/players.js";
+import { createAddress, deleteAddress, fetchMyAddresses } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
 import { Avatar } from "../components/Avatar.js";
+import { SavedAddressForm } from "../components/SavedAddressForm.js";
+import { SavedAddressList } from "../components/SavedAddressList.js";
 import { useAuth } from "../hooks/useAuth.js";
+
+/** The places this user travels to matches from. Private to them. */
+function AddressesSection() {
+  const queryClient = useQueryClient();
+  const { data: addresses, isLoading } = useQuery({
+    queryKey: ["addresses"],
+    queryFn: fetchMyAddresses,
+  });
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRemove(id: string) {
+    setError(null);
+    setRemovingId(id);
+    try {
+      await deleteAddress(id);
+      await queryClient.invalidateQueries({ queryKey: ["addresses"] });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't remove that address. Please try again.");
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
+  return (
+    <section className="profile-addresses">
+      <h2>Your addresses</h2>
+      <p className="profile-section-hint">
+        Where you travel to matches from. When you propose or accept a match you can say which one
+        you're coming from. Only you can see these.
+      </p>
+      {error && <p role="alert">{error}</p>}
+      {isLoading || !addresses ? (
+        <p>Loading…</p>
+      ) : (
+        <>
+          <SavedAddressList
+            addresses={addresses.map((a) => ({ key: a.id, label: a.label, address: a.address }))}
+            onRemove={handleRemove}
+            removingKey={removingId}
+          />
+          <SavedAddressForm
+            idPrefix="profile-address"
+            existingLabels={addresses.map((a) => a.label)}
+            onAdd={async (input) => {
+              await createAddress(input);
+              await queryClient.invalidateQueries({ queryKey: ["addresses"] });
+            }}
+          />
+        </>
+      )}
+    </section>
+  );
+}
 
 export function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -88,6 +146,8 @@ export function ProfilePage() {
           {saving ? "Saving…" : "Save"}
         </button>
       </form>
+
+      <AddressesSection />
     </div>
   );
 }

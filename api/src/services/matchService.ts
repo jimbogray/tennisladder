@@ -4,18 +4,79 @@ import { prisma } from "../config/prisma.js";
 /** Thrown for invalid match actions (bad turn, self-challenge, etc.). Callers surface as a 400. */
 export class MatchValidationError extends Error {}
 
+/**
+ * Which of their own saved addresses a player is travelling from: an address id, `null` to clear
+ * the choice, or `undefined` to leave it as it is.
+ *
+ * Deliberately not recorded as a MatchEvent: the event thread is shown to both players and
+ * re-embedded in emails, and this choice is private to the player who made it.
+ */
+export type TravelOriginChoice = string | null | undefined;
+
+async function assertOwnAddress(userId: string, addressId: TravelOriginChoice) {
+  if (!addressId) return;
+  // Scoped to the user so nobody can attach (or probe for) another player's address.
+  const address = await prisma.userAddress.findFirst({ where: { id: addressId, userId } });
+  if (!address) {
+    throw new MatchValidationError("That address isn't one of your saved addresses");
+  }
+}
+
+async function applyTravelOrigin(
+  tx: Prisma.TransactionClient,
+  matchId: string,
+  userId: string,
+  addressId: TravelOriginChoice,
+) {
+  if (addressId === undefined) return;
+  if (addressId === null) {
+    await tx.matchTravelOrigin.deleteMany({ where: { matchId, userId } });
+    return;
+  }
+  await tx.matchTravelOrigin.upsert({
+    where: { matchId_userId: { matchId, userId } },
+    create: { matchId, userId, addressId },
+    update: { addressId },
+  });
+}
+
+/** The acting player's own travel origin for a match, with its address; null if none is set. */
+export async function getTravelOrigin(matchId: string, userId: string) {
+  const origin = await prisma.matchTravelOrigin.findUnique({
+    where: { matchId_userId: { matchId, userId } },
+    include: { address: true },
+  });
+  return origin?.address ?? null;
+}
+
+/** Changes where a player is coming from without otherwise touching the match. */
+export async function setTravelOrigin(matchId: string, actingUserId: string, addressId: string | null) {
+  const match = await loadForParticipant(matchId, actingUserId);
+
+  // Only matches that are still to be played have a journey worth planning.
+  if (match.status !== MatchStatus.NEGOTIATING && match.status !== MatchStatus.SCHEDULED) {
+    throw new MatchValidationError("This match is no longer coming up");
+  }
+  await assertOwnAddress(actingUserId, addressId);
+
+  await applyTravelOrigin(prisma, matchId, actingUserId, addressId);
+  return getTravelOrigin(matchId, actingUserId);
+}
+
 export interface ProposeMatchInput {
   challengerId: string;
   opponentId: string;
   proposedDateTime: Date;
   proposedLocationId: string;
   proposedComment?: string;
+  travelOriginAddressId?: string | null;
 }
 
 export async function proposeMatch(input: ProposeMatchInput) {
   if (input.challengerId === input.opponentId) {
     throw new MatchValidationError("You can't challenge yourself");
   }
+  await assertOwnAddress(input.challengerId, input.travelOriginAddressId);
 
   const [challenger, opponent] = await Promise.all([
     prisma.user.findUnique({ where: { id: input.challengerId }, select: { removedAt: true } }),
@@ -67,6 +128,8 @@ export async function proposeMatch(input: ProposeMatchInput) {
       },
     });
 
+    await applyTravelOrigin(tx, match.id, input.challengerId, input.travelOriginAddressId);
+
     return match;
   });
 }
@@ -91,6 +154,7 @@ export interface ProposalInput {
   proposedDateTime: Date;
   proposedLocationId: string;
   proposedComment?: string;
+  travelOriginAddressId?: string | null;
 }
 
 async function assertLocationExists(locationId: string) {
@@ -115,6 +179,7 @@ export async function amendProposal(matchId: string, actingUserId: string, input
     throw new MatchValidationError("It's your turn to respond — accept, counter or decline instead");
   }
   await assertLocationExists(input.proposedLocationId);
+  await assertOwnAddress(actingUserId, input.travelOriginAddressId);
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
@@ -138,6 +203,8 @@ export async function amendProposal(matchId: string, actingUserId: string, input
       },
     });
 
+    await applyTravelOrigin(tx, matchId, actingUserId, input.travelOriginAddressId);
+
     return updated;
   });
 }
@@ -156,6 +223,7 @@ export async function counterPropose(matchId: string, actingUserId: string, inpu
     throw new MatchValidationError("You've already responded — it's the other player's turn");
   }
   await assertLocationExists(input.proposedLocationId);
+  await assertOwnAddress(actingUserId, input.travelOriginAddressId);
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
@@ -180,6 +248,8 @@ export async function counterPropose(matchId: string, actingUserId: string, inpu
       },
     });
 
+    await applyTravelOrigin(tx, matchId, actingUserId, input.travelOriginAddressId);
+
     return updated;
   });
 }
@@ -188,7 +258,11 @@ export async function counterPropose(matchId: string, actingUserId: string, inpu
  * Locks in the standing offer. Only the player who owes a reply can accept — otherwise a player
  * could accept their own proposal.
  */
-export async function acceptMatch(matchId: string, actingUserId: string) {
+export async function acceptMatch(
+  matchId: string,
+  actingUserId: string,
+  travelOriginAddressId?: string | null,
+) {
   const match = await loadForParticipant(matchId, actingUserId);
 
   if (match.status !== MatchStatus.NEGOTIATING) {
@@ -197,6 +271,7 @@ export async function acceptMatch(matchId: string, actingUserId: string) {
   if (match.awaitingResponseFromUserId !== actingUserId) {
     throw new MatchValidationError("You can't accept your own proposal");
   }
+  await assertOwnAddress(actingUserId, travelOriginAddressId);
 
   // TODO: generate the 4 MatchResultToken rows (WON/LOST x challenger/opponent) and send
   // confirmation emails once the result-submission flow exists.
@@ -219,6 +294,8 @@ export async function acceptMatch(matchId: string, actingUserId: string) {
         snapshotLocationId: match.proposedLocationId,
       },
     });
+
+    await applyTravelOrigin(tx, matchId, actingUserId, travelOriginAddressId);
 
     return updated;
   });

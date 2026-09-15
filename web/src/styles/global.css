@@ -1127,3 +1127,71 @@ gmp-place-autocomplete {
     align-items: flex-start;
   }
 }
+
+/* Saved addresses (profile, registration) and choosing where you're coming from for a match */
+
+.profile-addresses {
+  max-width: 560px;
+  margin-top: 2.5rem;
+}
+
+.profile-section-hint {
+  margin: -0.25rem 0 1.25rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.saved-address-list {
+  margin-bottom: 1.25rem;
+}
+
+.saved-address-form,
+.register-addresses,
+.travel-origin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  max-width: 420px;
+}
+
+.saved-address-form small {
+  overflow-wrap: anywhere;
+}
+
+/* Google's autocomplete can't be targeted by a <label>, so its heading is a styled span. */
+.saved-address-form-heading {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.saved-address-form button {
+  align-self: flex-start;
+}
+
+.register-addresses {
+  margin-top: 0.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.register-addresses h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.register-addresses small {
+  margin-top: -0.5rem;
+}
+
+.register-addresses .saved-address-list {
+  margin-bottom: 0;
+}
+
+.travel-origin-field {
+  margin-bottom: 1rem;
+}
+
+.travel-origin-field select {
+  max-width: 100%;
+}

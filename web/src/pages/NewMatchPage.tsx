@@ -9,10 +9,17 @@ import { LocationPicker } from "../components/LocationPicker.js";
 import { ApiError } from "../api/client.js";
 import { MatchDateTimePicker } from "../components/MatchDateTimePicker.js";
 import { WeatherForecast } from "../components/WeatherForecast.js";
+import { fetchMyAddresses } from "../api/addresses.js";
+import {
+  defaultTravelOriginId,
+  toTravelOriginAddressId,
+  TravelOriginPicker,
+} from "../components/TravelOriginPicker.js";
 
 export function NewMatchPage() {
   const { data: players } = useQuery({ queryKey: ["players", "challengeable"], queryFn: fetchChallengeablePlayers });
   const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: fetchLocations });
+  const { data: addresses } = useQuery({ queryKey: ["addresses"], queryFn: fetchMyAddresses });
 
   // The ladder's challenge action links here as /matches/new?opponentId=… to preselect an opponent.
   const [searchParams] = useSearchParams();
@@ -20,6 +27,9 @@ export function NewMatchPage() {
   const [proposedLocationId, setProposedLocationId] = useState("");
   const [proposedDateTime, setProposedDateTime] = useState("");
   const [proposedComment, setProposedComment] = useState("");
+  // null until the player picks, so the default can follow their addresses once they load.
+  const [travelOrigin, setTravelOrigin] = useState<string | null>(null);
+  const travelOriginId = travelOrigin ?? defaultTravelOriginId(addresses);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -32,6 +42,7 @@ export function NewMatchPage() {
         proposedDateTime: new Date(proposedDateTime).toISOString(),
         proposedLocationId,
         proposedComment: proposedComment || undefined,
+        travelOriginAddressId: addresses ? toTravelOriginAddressId(travelOriginId) : undefined,
       });
       navigate(`/matches/${match.id}`);
     } catch (err) {
@@ -51,6 +62,12 @@ export function NewMatchPage() {
       />
       <LocationPicker locations={locations ?? []} value={proposedLocationId} onChange={setProposedLocationId} />
       <WeatherForecast locationId={proposedLocationId} dateTime={proposedDateTime} />
+      <TravelOriginPicker
+        id="new-match-travel-origin"
+        addresses={addresses}
+        value={travelOriginId}
+        onChange={setTravelOrigin}
+      />
       <textarea
         placeholder="Optional comment"
         value={proposedComment}

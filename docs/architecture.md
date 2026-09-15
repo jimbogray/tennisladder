@@ -43,6 +43,8 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 - **RefreshToken**: id, userId, tokenHash (unique, store hash not raw), expiresAt, revokedAt?.
 - **PointsAdjustment**: id, userId, adjustedByAdminId, previousPoints, newPoints, reason? — audit trail for admin manual point overrides.
 - **PasswordResetToken**: id, userId, tokenHash (unique), expiresAt, usedAt? — supports the added password-reset flow.
+- **UserAddress**: id, userId, label (unique per user, also compared case-insensitively), address — places a user travels to matches from (see Saved Addresses below).
+- **MatchTravelOrigin**: id, matchId, userId, addressId — which saved address one player is coming from for one match, unique per (match, user).
 
 ## Match State Machine
 
@@ -75,12 +77,12 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 ## API Endpoints (grouped)
 
 - **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/google` (+`/callback`), `POST /api/auth/complete-profile`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, `GET /api/auth/verify-email/:token`.
-- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
+- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name only), `GET`/`POST /api/players/me/addresses` and `DELETE /api/players/me/addresses/:id` (own saved addresses only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
 - **Registration codes**: `POST /api/admin/registration-codes`, `GET /api/admin/registration-codes` (Admin).
 - **Team**: `GET /api/admin/users` (every registered user who hasn't been removed, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id` (Admin). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
 - **Weather**: `GET /api/locations/:id/forecast[?at=<ISO>]` (Player/Admin) — a 7-day outlook, or with `at` the hours around a match time. Shown on the propose/amend/counter forms.
-- **Matches**: `GET /api/matches?filter=all|completed|pending`, `POST /api/matches` (propose — server rejects if either challenger or opponent has `participatesInLadder=false`), `GET /api/matches/:id`, `GET /api/matches/mine`, `POST /api/matches/:id/{counter,accept,decline}`, `GET /api/admin/matches/pending` (Admin).
+- **Matches**: `GET /api/matches?filter=all|completed|pending`, `POST /api/matches` (propose — server rejects if either challenger or opponent has `participatesInLadder=false`), `GET /api/matches/:id`, `GET /api/matches/mine`, `POST /api/matches/:id/{counter,accept,decline}`, `PUT /api/matches/:id/travel-origin` (the caller's own, upcoming matches only), `GET /api/admin/matches/pending` (Admin).
 - **Results**: `POST /api/matches/:id/result` (web), `GET`/`POST /api/results/token/:token` (public — token is the credential), `POST /api/admin/matches/:id/override-result` (Admin).
 
 ## Weather Forecast
@@ -91,6 +93,15 @@ The match proposal forms show the forecast for the chosen location: a 7-day outl
 - **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for weather.
 - **Forecast responses are cached in memory for 30 minutes per location**, which relies on the same single-replica assumption as the scheduled jobs (a second replica would only mean more upstream calls, not incorrect data).
 - Units are always metric in the API; the SPA converts to °F/mph for US-region locales.
+
+## Saved Addresses
+
+Users save labelled addresses (Home, Office, or a custom label) at registration or on their profile, using the same Places autocomplete as the Locations page. When proposing, amending, countering or accepting a match, and later on a scheduled match, a player can pick which one they're coming from. This is groundwork for driving directions and travel alerts.
+
+- **Private to the user.** Addresses are only reachable through `/players/me/addresses`, and a match's travel origin comes back only as `myTravelOrigin` on `GET /api/matches/:id`, always for the requesting user. Admins can't see either.
+- **Origins live in `MatchTravelOrigin`, not on `Match`.** Match rows are returned whole to both players and in the public match lists, so a column there would leak. For the same reason, choosing an origin writes no `MatchEvent`: the event thread is shown to both players and embedded in emails.
+- **Request semantics.** The propose, amend, counter and accept bodies take an optional `travelOriginAddressId`. If it's omitted, the current choice stays; `null` clears it; an id must belong to the caller. The SPA omits it while addresses are still loading, so a fast submit can't clear an earlier choice.
+- **Addresses are referenced, not copied.** Deleting an address cascades to the origins that used it. Addresses aren't geocoded yet; directions will need that, and it can follow the lazy cache pattern `Location` uses.
 
 ## React App Structure
 

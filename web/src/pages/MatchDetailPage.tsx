@@ -16,10 +16,16 @@ import {
   withdrawMatch,
 } from "../api/matches.js";
 import { fetchLocations } from "../api/locations.js";
+import { fetchMyAddresses, setTravelOrigin as saveTravelOrigin } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
 import { formatMatchDateTime } from "../lib/dateTime.js";
 import { MatchStatusBadge } from "../components/MatchStatusBadge.js";
 import { ProposalForm } from "../components/ProposalForm.js";
+import {
+  defaultTravelOriginId,
+  toTravelOriginAddressId,
+  TravelOriginPicker,
+} from "../components/TravelOriginPicker.js";
 import { useAuth } from "../hooks/useAuth.js";
 
 function PlayerLine({ player, isCurrentUser }: { player: PublicUserDto; isCurrentUser: boolean }) {
@@ -39,7 +45,8 @@ type Mode =
   | "withdraw"
   | "report-result"
   | "amend-result"
-  | "reject-result";
+  | "reject-result"
+  | "travel-origin";
 
 // Cancelling, withdrawing and rejecting a score all share a confirm-with-optional-reason step;
 // only the wording and the endpoint differ.
@@ -84,7 +91,10 @@ export function MatchDetailPage() {
     enabled: !!id,
   });
   const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: fetchLocations });
+  const { data: addresses } = useQuery({ queryKey: ["addresses"], queryFn: fetchMyAddresses });
   const [mode, setMode] = useState<Mode>("none");
+  // null until the player picks, so the default follows the match's saved choice once loaded.
+  const [travelOrigin, setTravelOrigin] = useState<string | null>(null);
   const [endComment, setEndComment] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -96,6 +106,7 @@ export function MatchDetailPage() {
       await action();
       setMode("none");
       setEndComment("");
+      setTravelOrigin(null);
       await queryClient.invalidateQueries({ queryKey: ["match", id] });
       await queryClient.invalidateQueries({ queryKey: ["matches"] });
     } catch (err) {
@@ -125,6 +136,21 @@ export function MatchDetailPage() {
   // A score is awaiting an answer; whoever didn't report it owes the reply.
   const scorePending = data.status === "RESULT_PENDING";
   const iReportedScore = scorePending && !isMyTurn;
+
+  const upcoming = negotiating || data.status === "SCHEDULED";
+  const travelOriginId = travelOrigin ?? defaultTravelOriginId(addresses, data.myTravelOrigin);
+  // Undefined while addresses are loading leaves the saved choice untouched.
+  const travelOriginAddressId = addresses ? toTravelOriginAddressId(travelOriginId) : undefined;
+  const travelOriginPicker = (
+    <div className="travel-origin-field">
+      <TravelOriginPicker
+        id="match-travel-origin"
+        addresses={addresses}
+        value={travelOriginId}
+        onChange={setTravelOrigin}
+      />
+    </div>
+  );
 
   return (
     <div>
@@ -167,6 +193,20 @@ export function MatchDetailPage() {
           </>
         ) : null}
 
+        {/* Private: the API only ever returns the requesting player's own choice. While
+            negotiating, every action form has its own picker, so an unset choice isn't repeated. */}
+        {isParticipant && (data.myTravelOrigin || data.status === "SCHEDULED") ? (
+          <>
+            <dt>Coming from</dt>
+            <dd>
+              {data.myTravelOrigin ? data.myTravelOrigin.label : "Not specified"}
+              <span className="match-detail-address">
+                {data.myTravelOrigin ? `${data.myTravelOrigin.address} · ` : ""}Only you can see this
+              </span>
+            </dd>
+          </>
+        ) : null}
+
         {data.isTie || (winner && loser) ? (
           <>
             <dt>{data.status === "COMPLETED" ? "Result" : "Reported score"}</dt>
@@ -200,8 +240,12 @@ export function MatchDetailPage() {
             <p>
               {otherPlayer.firstName} proposed this — accept it, suggest a change, or decline.
             </p>
+            {travelOriginPicker}
             <div className="form-actions">
-              <button type="button" onClick={() => run(() => acceptMatch(data.id))}>
+              <button
+                type="button"
+                onClick={() => run(() => acceptMatch(data.id, { travelOriginAddressId }))}
+              >
                 Accept
               </button>
               <button type="button" onClick={() => setMode("counter")}>
@@ -232,8 +276,10 @@ export function MatchDetailPage() {
       {isParticipant && negotiating && (mode === "amend" || mode === "counter") ? (
         <ProposalForm
           locations={locations ?? []}
+          addresses={addresses}
           initialDateTime={data.proposedDateTime}
           initialLocationId={data.proposedLocationId}
+          initialTravelOrigin={data.myTravelOrigin}
           submitLabel={mode === "amend" ? "Update proposal" : "Send back"}
           onCancel={() => setMode("none")}
           onSubmit={(input) =>
@@ -295,10 +341,43 @@ export function MatchDetailPage() {
           <button type="button" onClick={() => setMode("report-result")}>
             Record result
           </button>
+          {addresses?.length ? (
+            <button type="button" className="button-secondary" onClick={() => setMode("travel-origin")}>
+              Change where you're coming from
+            </button>
+          ) : null}
           <button type="button" className="button-danger" onClick={() => setMode("cancel")}>
             Cancel match
           </button>
         </div>
+      ) : null}
+
+      {isParticipant && upcoming && mode === "travel-origin" ? (
+        <>
+          {travelOriginPicker}
+          <div className="form-actions">
+            <button
+              type="button"
+              onClick={() =>
+                run(() =>
+                  saveTravelOrigin(data.id, { addressId: toTravelOriginAddressId(travelOriginId) }),
+                )
+              }
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => {
+                setMode("none");
+                setTravelOrigin(null);
+              }}
+            >
+              Back
+            </button>
+          </div>
+        </>
       ) : null}
 
       {isParticipant && scorePending && mode === "none" ? (

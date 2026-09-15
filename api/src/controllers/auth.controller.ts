@@ -12,6 +12,7 @@ import {
   RegistrationCodeError,
 } from "../services/registrationCodeService.js";
 import { sendEmail } from "../services/emailService.js";
+import { addressListSchema } from "../services/addressService.js";
 import { renderPasswordResetEmail } from "../emails/templates/passwordReset.js";
 import { env } from "../config/env.js";
 
@@ -56,6 +57,8 @@ const registerSchema = z.object({
   password: passwordSchema,
   ustaRating: z.string().optional(),
   registrationCode: z.string().length(4, "Registration code must be 4 digits"),
+  // Optional places the new user travels from; they can also be added later on the profile page.
+  addresses: addressListSchema.optional(),
 });
 
 export const register = asyncHandler(async (req: Request, res: Response) => {
@@ -92,6 +95,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
       role,
       participatesInLadder,
       registrationCodeId: code.id,
+      addresses: data.addresses?.length ? { create: data.addresses } : undefined,
     },
   });
 
