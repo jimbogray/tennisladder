@@ -7,6 +7,7 @@ export const playersRouter = Router();
 playersRouter.get("/", requireAuth, players.listLadder);
 playersRouter.get("/challengeable", requireAuth, players.listChallengeable);
 playersRouter.get("/me", requireAuth, players.me);
+playersRouter.patch("/me", requireAuth, players.updateMe);
 
 export const adminPlayersRouter = Router();
 adminPlayersRouter.patch("/:id/points", requireAuth, requireAdmin, players.adjustPoints);

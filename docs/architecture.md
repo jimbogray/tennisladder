@@ -75,7 +75,7 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 ## API Endpoints (grouped)
 
 - **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/google` (+`/callback`), `POST /api/auth/complete-profile`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, `GET /api/auth/verify-email/:token`.
-- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
+- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
 - **Registration codes**: `POST /api/admin/registration-codes`, `GET /api/admin/registration-codes` (Admin).
 - **Team**: `GET /api/admin/users` (every registered user with email and account type), `PATCH /api/admin/users/:id/account-type` (Admin). Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
@@ -94,7 +94,7 @@ The match proposal forms show the forecast for the chosen location: a 7-day outl
 
 ## React App Structure
 
-Routes (`react-router-dom`): `/login`, `/signup`, `/complete-profile`, `/ladder`, `/matches` (+ `/matches/new`, `/matches/:id`), `/negotiations`, `/admin/negotiations`, `/locations`, `/admin/players`, `/admin/team`, `/admin/registration-codes`, `/forgot-password`, `/reset-password/:token`, `/verify-email/:token`, `/results/confirm/:token` (public — token is the credential), all others behind `RequireAuth`/`RequireAdmin` guards fed by an `AuthContext` populated from `GET /api/auth/session`.
+Routes (`react-router-dom`): `/login`, `/signup`, `/complete-profile`, `/ladder`, `/matches` (+ `/matches/new`, `/matches/:id`), `/negotiations`, `/admin/negotiations`, `/locations`, `/profile`, `/admin/players`, `/admin/team`, `/admin/registration-codes`, `/forgot-password`, `/reset-password/:token`, `/verify-email/:token`, `/results/confirm/:token` (public — token is the credential), all others behind `RequireAuth`/`RequireAdmin` guards fed by an `AuthContext` populated from `GET /api/auth/session`.
 
 Shared components: `CommentThread`, `FilterToggleBar`, `LadderTable`, `NegotiationActions`, `LocationPicker`, `OpponentPicker` (sources `/api/players/challengeable`, excludes coach-admins), `MatchStatusBadge`, `RequireAuth`/`RequireAdmin`. Server state via TanStack Query; thin typed API client modules under `src/api/`.
 

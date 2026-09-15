@@ -20,6 +20,13 @@ export interface SessionUserDto extends PublicUserDto {
   email: string;
   ustaRating: string | null;
   profileCompletedAt: string | null;
+  // When the account was registered, shown on the profile page.
+  createdAt: string;
+}
+
+export interface UpdateProfileRequest {
+  firstName: string;
+  lastName: string;
 }
 
 export interface LadderEntryDto {

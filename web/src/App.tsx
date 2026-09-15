@@ -16,6 +16,7 @@ import { LocationsPage } from "./pages/LocationsPage.js";
 import { AdminPlayersPage } from "./pages/AdminPlayersPage.js";
 import { AdminInvitesPage } from "./pages/AdminInvitesPage.js";
 import { AdminTeamPage } from "./pages/AdminTeamPage.js";
+import { ProfilePage } from "./pages/ProfilePage.js";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage.js";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage.js";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage.js";
@@ -55,6 +56,7 @@ export function App() {
         <Route path="/matches/:id" element={<MatchDetailPage />} />
         <Route path="/negotiations" element={<NegotiationsPage />} />
         <Route path="/locations" element={<LocationsPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route
           path="/admin/negotiations"
           element={

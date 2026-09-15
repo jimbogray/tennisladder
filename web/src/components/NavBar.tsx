@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.js";
+import { UserMenu } from "./UserMenu.js";
 
 const LINKS = [
   { to: "/ladder", label: "Ladder", adminOnly: false },
@@ -11,8 +12,7 @@ const LINKS = [
 ];
 
 export function NavBar() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   // Below the nav's breakpoint the links collapse behind a hamburger; above it this is ignored.
   const [menuOpen, setMenuOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
@@ -37,12 +37,6 @@ export function NavBar() {
     };
   }, [menuOpen]);
 
-  async function handleLogout() {
-    setMenuOpen(false);
-    await logout();
-    navigate("/");
-  }
-
   const visibleLinks = LINKS.filter((link) => !link.adminOnly || user?.role === "ADMIN");
 
   return (
@@ -66,10 +60,10 @@ export function NavBar() {
             {link.label}
           </NavLink>
         ))}
-        <button type="button" className="navbar-logout" onClick={() => handleLogout()}>
-          Log out
-        </button>
       </div>
+
+      {/* Outside the collapsible links, so the account menu stays in reach on narrow screens. */}
+      <UserMenu />
     </nav>
   );
 }
