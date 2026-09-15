@@ -7,14 +7,16 @@ import { FilterToggleBar } from "../components/FilterToggleBar.js";
 import { MatchStatusBadge } from "../components/MatchStatusBadge.js";
 import { useAuth } from "../hooks/useAuth.js";
 
-type PlayerOutcome = "won" | "lost" | "tied" | null;
+type PlayerOutcome = "won" | "tied" | null;
 
-/** Only a finished match has an outcome — a proposed score isn't one yet. */
+/**
+ * Only a finished match has an outcome — a proposed score isn't one yet. The loser gets no badge:
+ * highlighting just the winner keeps the row readable at a glance.
+ */
 function outcomeFor(match: MatchDto, playerId: string): PlayerOutcome {
   if (match.status !== "COMPLETED") return null;
   if (match.isTie) return "tied";
   if (match.winnerId === playerId) return "won";
-  if (match.loserId === playerId) return "lost";
   return null;
 }
 
