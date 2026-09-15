@@ -43,6 +43,7 @@ export const env = {
   emailFromAddress: process.env.EMAIL_FROM_ADDRESS ?? "ladder@example.com",
 
   registrationCodeTtlHours: Number(process.env.REGISTRATION_CODE_TTL_HOURS ?? 48),
+  passwordResetTtlMinutes: Number(process.env.PASSWORD_RESET_TTL_MINUTES ?? 60),
   matchReminderLeadMinutes: Number(process.env.MATCH_REMINDER_LEAD_MINUTES ?? 60),
   staleResultReminderHours: Number(process.env.STALE_RESULT_REMINDER_HOURS ?? 24),
 };
