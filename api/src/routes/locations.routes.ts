@@ -4,6 +4,7 @@ import * as locations from "../controllers/locations.controller.js";
 
 export const locationsRouter = Router();
 locationsRouter.get("/", requireAuth, locations.listLocations);
+locationsRouter.get("/:id/forecast", requireAuth, locations.getForecast);
 
 export const adminLocationsRouter = Router();
 adminLocationsRouter.post("/", requireAuth, requireAdmin, locations.createLocation);
