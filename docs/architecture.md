@@ -83,7 +83,7 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 
 ## React App Structure
 
-Routes (`react-router-dom`): `/login`, `/signup`, `/complete-profile`, `/ladder`, `/matches` (+ `/matches/new`, `/matches/:id`), `/negotiations`, `/admin/negotiations`, `/locations`, `/admin/players`, `/admin/registration-codes`, `/reset-password/:token`, `/verify-email/:token`, `/results/confirm/:token` (public — token is the credential), all others behind `RequireAuth`/`RequireAdmin` guards fed by an `AuthContext` populated from `GET /api/auth/session`.
+Routes (`react-router-dom`): `/login`, `/signup`, `/complete-profile`, `/ladder`, `/matches` (+ `/matches/new`, `/matches/:id`), `/negotiations`, `/admin/negotiations`, `/locations`, `/admin/players`, `/admin/registration-codes`, `/forgot-password`, `/reset-password/:token`, `/verify-email/:token`, `/results/confirm/:token` (public — token is the credential), all others behind `RequireAuth`/`RequireAdmin` guards fed by an `AuthContext` populated from `GET /api/auth/session`.
 
 Shared components: `CommentThread`, `FilterToggleBar`, `LadderTable`, `NegotiationActions`, `LocationPicker`, `OpponentPicker` (sources `/api/players/challengeable`, excludes coach-admins), `MatchStatusBadge`, `RequireAuth`/`RequireAdmin`. Server state via TanStack Query; thin typed API client modules under `src/api/`.
 

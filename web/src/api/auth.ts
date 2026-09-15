@@ -44,7 +44,7 @@ export function logout() {
 }
 
 export function requestPasswordReset(email: string) {
-  return apiFetch<void>("/auth/request-password-reset", {
+  return apiFetch<{ expiresInMinutes: number }>("/auth/request-password-reset", {
     method: "POST",
     body: JSON.stringify({ email }),
   });

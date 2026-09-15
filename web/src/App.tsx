@@ -15,6 +15,7 @@ import { AdminNegotiationsPage } from "./pages/AdminNegotiationsPage.js";
 import { LocationsPage } from "./pages/LocationsPage.js";
 import { AdminPlayersPage } from "./pages/AdminPlayersPage.js";
 import { AdminInvitesPage } from "./pages/AdminInvitesPage.js";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage.js";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage.js";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage.js";
 import { ResultConfirmPage } from "./pages/ResultConfirmPage.js";
@@ -26,6 +27,7 @@ export function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
       <Route path="/results/confirm/:token" element={<ResultConfirmPage />} />

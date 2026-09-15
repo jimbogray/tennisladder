@@ -39,6 +39,9 @@ export function LoginPage() {
           <button type="submit">Log in</button>
           {/* TODO: "Continue with Google" button linking to GET /api/auth/google */}
           <p>
+            <Link to="/forgot-password">Forgot password?</Link>
+          </p>
+          <p>
             <Link to="/register">Register</Link>
           </p>
         </form>
