@@ -341,6 +341,16 @@ textarea {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* The rule above is written for text fields — a checkbox or radio keeps its native box. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  accent-color: var(--court-green);
+}
+
 input::placeholder {
   color: #94a39a;
 }
@@ -1024,7 +1034,38 @@ tbody tr.row-me td:first-child {
 
 .location-actions {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
+}
+
+/* Reads as one control: the box and its word stay together. */
+.location-indoor {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.location-indoor input {
+  margin: 0;
+}
+
+/* What non-admins see instead of the checkbox. */
+.location-tag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--ball-yellow);
+  color: var(--court-green-dark);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 0.1em;
 }
 
 .location-actions button {

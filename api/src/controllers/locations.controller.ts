@@ -41,19 +41,21 @@ const upsertLocationSchema = z.object({
     .max(500)
     .optional()
     .transform((value) => value?.trim() || null),
+  // Defaulted rather than required, so a client that predates indoor courts still creates one.
+  isIndoor: z.boolean().optional().default(false),
 });
 
 export const createLocation = asyncHandler(async (req: Request, res: Response) => {
-  const { name, address } = upsertLocationSchema.parse(req.body);
-  const location = await prisma.location.create({ data: { name, address } });
+  const { name, address, isIndoor } = upsertLocationSchema.parse(req.body);
+  const location = await prisma.location.create({ data: { name, address, isIndoor } });
   res.status(201).json(location);
 });
 
 export const updateLocation = asyncHandler(async (req: Request, res: Response) => {
-  const { name, address } = upsertLocationSchema.parse(req.body);
+  const { name, address, isIndoor } = upsertLocationSchema.parse(req.body);
   const location = await prisma.location.update({
     where: { id: req.params.id },
-    data: { name, address },
+    data: { name, address, isIndoor },
   });
   res.json(location);
 });

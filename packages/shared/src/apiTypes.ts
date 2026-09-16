@@ -63,7 +63,17 @@ export interface LocationDto {
   id: string;
   name: string;
   address: string | null;
+  // Indoor courts play in any weather, so no forecast is shown for them.
+  isIndoor: boolean;
   archivedAt: string | null;
+}
+
+// Body of POST /api/admin/locations and PATCH /api/admin/locations/:id.
+export interface UpsertLocationRequest {
+  name: string;
+  // Empty is stored as null — the location simply has no address yet.
+  address: string;
+  isIndoor: boolean;
 }
 
 // Weather forecast for a location (GET /api/locations/:id/forecast). Always metric — the client

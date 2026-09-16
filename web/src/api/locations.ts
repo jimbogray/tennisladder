@@ -1,4 +1,8 @@
-import type { LocationDto, LocationForecastDto } from "@tennisladder/shared";
+import type {
+  LocationDto,
+  LocationForecastDto,
+  UpsertLocationRequest,
+} from "@tennisladder/shared";
 import { apiFetch } from "./client.js";
 
 export function fetchLocations() {
@@ -11,17 +15,17 @@ export function fetchLocationForecast(id: string, at?: string) {
   return apiFetch<LocationForecastDto>(`/locations/${id}/forecast${query}`);
 }
 
-export function createLocation(name: string, address: string) {
+export function createLocation(body: UpsertLocationRequest) {
   return apiFetch<LocationDto>("/admin/locations", {
     method: "POST",
-    body: JSON.stringify({ name, address }),
+    body: JSON.stringify(body),
   });
 }
 
-export function updateLocation(id: string, name: string, address: string) {
+export function updateLocation(id: string, body: UpsertLocationRequest) {
   return apiFetch<LocationDto>(`/admin/locations/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ name, address }),
+    body: JSON.stringify(body),
   });
 }
 
