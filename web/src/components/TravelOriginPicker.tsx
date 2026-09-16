@@ -45,9 +45,11 @@ export function TravelOriginPicker({
       <label htmlFor={id}>Coming from</label>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)} aria-describedby={`${id}-hint`}>
         <option value="">Not specified</option>
+        {/* Label only, never the street address: (userId, label) is unique, so it still tells
+            them apart, and a full home address doesn't belong on a match form. */}
         {addresses.map((address) => (
           <option key={address.id} value={address.id}>
-            {address.label} — {address.address}
+            {address.label}
           </option>
         ))}
       </select>

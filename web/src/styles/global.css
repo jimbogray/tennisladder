@@ -166,25 +166,16 @@ a:hover {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 50%;
   background: var(--ball-yellow);
   color: var(--court-green-dark);
   font-family: var(--font-heading);
+  font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   user-select: none;
-}
-
-.avatar-small {
-  width: 2.25rem;
-  height: 2.25rem;
-  font-size: 0.85rem;
-}
-
-.avatar-large {
-  width: 5rem;
-  height: 5rem;
-  font-size: 1.75rem;
 }
 
 /* Account menu */
@@ -1074,9 +1065,6 @@ gmp-place-autocomplete {
 /* Profile page */
 
 .profile-summary {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
   margin: 0 0 2rem;
   padding: 1.5rem;
   background: var(--white);
@@ -1119,13 +1107,6 @@ gmp-place-autocomplete {
   font-size: 0.9rem;
   font-weight: 500;
   margin: 0;
-}
-
-@media (max-width: 30rem) {
-  .profile-summary {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }
 
 /* Saved addresses (profile, registration) and choosing where you're coming from for a match */

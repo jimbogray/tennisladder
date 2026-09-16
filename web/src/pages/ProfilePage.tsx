@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { updateMyProfile } from "../api/players.js";
 import { createAddress, deleteAddress, fetchMyAddresses } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
-import { Avatar } from "../components/Avatar.js";
 import { SavedAddressForm } from "../components/SavedAddressForm.js";
 import { SavedAddressList } from "../components/SavedAddressList.js";
 import { useAuth } from "../hooks/useAuth.js";
@@ -104,18 +103,15 @@ export function ProfilePage() {
       <h1>Profile</h1>
 
       <section className="profile-summary">
-        <Avatar firstName={user.firstName} lastName={user.lastName} size="large" />
-        <div>
-          <h2>
-            {user.firstName} {user.lastName}
-          </h2>
-          <dl className="profile-details">
-            <dt>Email</dt>
-            <dd>{user.email}</dd>
-            <dt>Member since</dt>
-            <dd>{memberSince}</dd>
-          </dl>
-        </div>
+        <h2>
+          {user.firstName} {user.lastName}
+        </h2>
+        <dl className="profile-details">
+          <dt>Email</dt>
+          <dd>{user.email}</dd>
+          <dt>Member since</dt>
+          <dd>{memberSince}</dd>
+        </dl>
       </section>
 
       <form onSubmit={handleSubmit}>
