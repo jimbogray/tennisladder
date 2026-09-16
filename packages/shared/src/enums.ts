@@ -57,3 +57,21 @@ export const MatchStatusFilter = {
   PENDING: "pending",
 } as const;
 export type MatchStatusFilter = (typeof MatchStatusFilter)[keyof typeof MatchStatusFilter];
+
+/**
+ * The NTRP ratings a player can hold, 2.5 to 7.0 in half steps. Kept as strings to match how the
+ * Decimal(2,1) column is serialized everywhere else ("3.0", never "3").
+ */
+export const USTA_RATINGS = [
+  "2.5",
+  "3.0",
+  "3.5",
+  "4.0",
+  "4.5",
+  "5.0",
+  "5.5",
+  "6.0",
+  "6.5",
+  "7.0",
+] as const;
+export type UstaRating = (typeof USTA_RATINGS)[number];

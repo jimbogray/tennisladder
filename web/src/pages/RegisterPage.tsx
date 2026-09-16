@@ -3,12 +3,9 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { register } from "../api/auth.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { ApiError } from "../api/client.js";
-import type { CreateUserAddressRequest } from "@tennisladder/shared";
+import { USTA_RATINGS, type CreateUserAddressRequest } from "@tennisladder/shared";
 import { SavedAddressForm } from "../components/SavedAddressForm.js";
 import { SavedAddressList } from "../components/SavedAddressList.js";
-
-// USTA NTRP ratings run from 2.5 to 7.0 in 0.5 increments.
-const USTA_RATINGS = Array.from({ length: 10 }, (_, i) => (2.5 + i * 0.5).toFixed(1));
 
 export function RegisterPage() {
   // Invite emails link here as /register?code=1234 so the recipient doesn't have to type it.

@@ -14,7 +14,9 @@ export function toSessionUserDto(user: SessionUser): SessionUserDto {
     participatesInLadder: user.participatesInLadder,
     points: user.points,
     email: user.email,
-    ustaRating: user.ustaRating?.toString() ?? null,
+    // toFixed(1), not toString(): a stored 3.0 must come back as "3.0" so it matches both the
+    // ladder's rendering and the rating options on the profile form.
+    ustaRating: user.ustaRating?.toFixed(1) ?? null,
     profileCompletedAt: user.profileCompletedAt?.toISOString() ?? null,
     createdAt: user.createdAt.toISOString(),
   };
