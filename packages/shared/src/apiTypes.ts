@@ -3,6 +3,7 @@ import type {
   MatchStatus,
   ResultOutcome,
   UserRole,
+  UstaRating,
 } from "./enums.js";
 
 export interface PublicUserDto {
@@ -27,6 +28,9 @@ export interface SessionUserDto extends PublicUserDto {
 export interface UpdateProfileRequest {
   firstName: string;
   lastName: string;
+  // Omitted leaves the rating as it is; null clears it. Ignored for accounts off the ladder,
+  // where a rating means nothing.
+  ustaRating?: UstaRating | null;
 }
 
 // A place the user travels to matches from. Only ever returned to its owner.

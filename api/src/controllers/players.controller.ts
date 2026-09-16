@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
+import { USTA_RATINGS } from "@tennisladder/shared";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { toSessionUserDto } from "../auth/sessionUser.js";
@@ -89,14 +90,32 @@ const nameField = (label: string) =>
 const updateProfileSchema = z.object({
   firstName: nameField("First name"),
   lastName: nameField("Last name"),
+  // An empty <select> means "no rating"; anything off the NTRP scale is rejected here rather than
+  // handed to a Decimal(2,1) column that would throw on it.
+  ustaRating: z
+    .union([z.enum(USTA_RATINGS), z.literal(""), z.null()], {
+      errorMap: () => ({ message: "Choose a USTA rating from the list" }),
+    })
+    .optional(),
 });
 
-/** Name is the only self-editable field; email and role changes need a different flow. */
+/**
+ * Name and USTA rating are the self-editable fields; email and role changes need a different flow.
+ * Points aren't touchable here either — they're earned, or adjusted by an admin.
+ */
 export const updateMe = asyncHandler(async (req: Request, res: Response) => {
-  const { firstName, lastName } = updateProfileSchema.parse(req.body);
+  const { firstName, lastName, ustaRating } = updateProfileSchema.parse(req.body);
   const user = await prisma.user.update({
     where: { id: req.user!.id },
-    data: { firstName, lastName },
+    data: {
+      firstName,
+      lastName,
+      // A rating only means something for someone on the ladder — the same rule registration
+      // applies. Coach-admins never get one, whatever they send.
+      ...(ustaRating !== undefined && req.user!.participatesInLadder
+        ? { ustaRating: ustaRating === "" ? null : ustaRating }
+        : {}),
+    },
   });
   res.json(toSessionUserDto(user));
 });

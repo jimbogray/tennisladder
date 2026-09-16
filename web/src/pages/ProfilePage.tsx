@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { USTA_RATINGS, type UstaRating } from "@tennisladder/shared";
 import { updateMyProfile } from "../api/players.js";
 import { createAddress, deleteAddress, fetchMyAddresses } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
@@ -67,13 +68,20 @@ export function ProfilePage() {
   // Rendered behind RequireAuth, so a user is always present.
   const [firstName, setFirstName] = useState(user!.firstName);
   const [lastName, setLastName] = useState(user!.lastName);
+  // "" is the "no rating yet" option; the API stores it as null.
+  const [ustaRating, setUstaRating] = useState(user!.ustaRating ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
   if (!user) return null;
 
-  const unchanged = firstName.trim() === user.firstName && lastName.trim() === user.lastName;
+  // A rating is a ladder concept, so coach-admins don't get the field at all.
+  const canSetRating = user.participatesInLadder;
+  const unchanged =
+    firstName.trim() === user.firstName &&
+    lastName.trim() === user.lastName &&
+    (!canSetRating || ustaRating === (user.ustaRating ?? ""));
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -81,13 +89,20 @@ export function ProfilePage() {
     setSaved(false);
     setSaving(true);
     try {
-      const updated = await updateMyProfile({ firstName, lastName });
+      const updated = await updateMyProfile({
+        firstName,
+        lastName,
+        ustaRating: ustaRating === "" ? null : (ustaRating as UstaRating),
+      });
       updateUser(updated);
       setFirstName(updated.firstName);
       setLastName(updated.lastName);
+      setUstaRating(updated.ustaRating ?? "");
       setSaved(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't save your name. Please try again.");
+      setError(
+        err instanceof ApiError ? err.message : "Couldn't save your details. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
@@ -119,9 +134,9 @@ export function ProfilePage() {
       </section>
 
       <form onSubmit={handleSubmit}>
-        <h2>Your name</h2>
+        <h2>Your details</h2>
         {error && <p role="alert">{error}</p>}
-        {saved && <p role="status">Your name has been updated.</p>}
+        {saved && <p role="status">Your details have been updated.</p>}
         <label htmlFor="profile-first-name">First name</label>
         <input
           id="profile-first-name"
@@ -142,6 +157,30 @@ export function ProfilePage() {
             setSaved(false);
           }}
         />
+        {canSetRating && (
+          <>
+            <label htmlFor="profile-usta-rating">USTA rating</label>
+            <select
+              id="profile-usta-rating"
+              aria-describedby="profile-usta-rating-hint"
+              value={ustaRating}
+              onChange={(e) => {
+                setUstaRating(e.target.value);
+                setSaved(false);
+              }}
+            >
+              <option value="">No rating</option>
+              {USTA_RATINGS.map((rating) => (
+                <option key={rating} value={rating}>
+                  {rating}
+                </option>
+              ))}
+            </select>
+            <small id="profile-usta-rating-hint">
+              Shown next to your name on the ladder. Update it when your NTRP rating changes.
+            </small>
+          </>
+        )}
         <button type="submit" disabled={saving || unchanged}>
           {saving ? "Saving…" : "Save"}
         </button>
