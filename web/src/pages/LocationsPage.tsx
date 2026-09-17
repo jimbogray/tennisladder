@@ -59,6 +59,16 @@ export function LocationsPage() {
                   {loc.address ? <p className="location-address">{loc.address}</p> : null}
                 </div>
                 <div className="location-actions">
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="location-indoor-toggle"
+                      aria-pressed={loc.isIndoor}
+                      onClick={() => setIndoor(loc, !loc.isIndoor)}
+                    >
+                      Indoor
+                    </button>
+                  ) : null}
                   {loc.address && googleMapsApiKey ? (
                     <button
                       type="button"
@@ -69,14 +79,6 @@ export function LocationsPage() {
                   ) : null}
                   {isAdmin ? (
                     <>
-                      <label className="location-indoor">
-                        <input
-                          type="checkbox"
-                          checked={loc.isIndoor}
-                          onChange={(e) => setIndoor(loc, e.target.checked)}
-                        />
-                        Indoor
-                      </label>
                       {/* TODO: inline edit control for name and address */}
                       <button type="button" onClick={() => deleteLocation(loc.id).then(refresh)}>
                         Delete

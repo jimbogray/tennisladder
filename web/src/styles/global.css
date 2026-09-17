@@ -1038,6 +1038,30 @@ tbody tr.row-me td:first-child {
   gap: 0.5rem;
 }
 
+/*
+ * On/off rather than an action, so it reads differently from the yellow buttons beside it:
+ * outlined while the courts are outdoor, filled green once they're indoor.
+ */
+.location-indoor-toggle {
+  background: var(--white);
+  color: var(--ink-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.location-indoor-toggle:hover {
+  background: var(--cream);
+}
+
+.location-indoor-toggle[aria-pressed="true"] {
+  background: var(--court-green);
+  color: var(--white);
+  box-shadow: inset 0 0 0 1px var(--court-green);
+}
+
+.location-indoor-toggle[aria-pressed="true"]:hover {
+  background: var(--court-green-light);
+}
+
 /* Reads as one control: the box and its word stay together. */
 .location-indoor {
   display: inline-flex;
