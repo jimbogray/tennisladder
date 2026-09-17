@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { LocationDto } from "@tennisladder/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createLocation, deleteLocation, fetchLocations, updateLocation } from "../api/locations.js";
+import { ApiError } from "../api/client.js";
 import { AddressAutocomplete } from "../components/AddressAutocomplete.js";
 import { LocationMap } from "../components/LocationMap.js";
 import { googleMapsApiKey } from "../lib/googleMaps.js";
@@ -17,34 +18,66 @@ export function LocationsPage() {
   const [isIndoor, setIsIndoor] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [openMapId, setOpenMapId] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  // Failures from the controls on a row, which have no form of their own to report into.
+  const [rowError, setRowError] = useState<string | null>(null);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["locations"] });
   }
 
+  function describe(err: unknown, fallback: string) {
+    return err instanceof ApiError ? err.message : fallback;
+  }
+
   async function handleAdd(e: FormEvent) {
     e.preventDefault();
-    await createLocation({ name, address, isIndoor });
-    setName("");
-    setAddress("");
-    setIsIndoor(false);
-    setFormKey((key) => key + 1); // remounts the autocomplete so Google's own input clears too
-    await refresh();
+    setAddError(null);
+    setAdding(true);
+    try {
+      await createLocation({ name, address, isIndoor });
+      setName("");
+      setAddress("");
+      setIsIndoor(false);
+      setFormKey((key) => key + 1); // remounts the autocomplete so Google's own input clears too
+      await refresh();
+    } catch (err) {
+      setAddError(describe(err, "Couldn't add the location. Please try again."));
+    } finally {
+      setAdding(false);
+    }
   }
 
   /** The only editable field on an existing location so far; name and address ride along unchanged. */
   async function setIndoor(location: LocationDto, indoor: boolean) {
-    await updateLocation(location.id, {
-      name: location.name,
-      address: location.address ?? "",
-      isIndoor: indoor,
-    });
-    await refresh();
+    setRowError(null);
+    try {
+      await updateLocation(location.id, {
+        name: location.name,
+        address: location.address ?? "",
+        isIndoor: indoor,
+      });
+      await refresh();
+    } catch (err) {
+      setRowError(describe(err, `Couldn't update ${location.name}. Please try again.`));
+    }
+  }
+
+  async function remove(location: LocationDto) {
+    setRowError(null);
+    try {
+      await deleteLocation(location.id);
+      await refresh();
+    } catch (err) {
+      setRowError(describe(err, `Couldn't delete ${location.name}. Please try again.`));
+    }
   }
 
   return (
     <div>
       <h1>Locations</h1>
+      {rowError && <p role="alert">{rowError}</p>}
       {isLoading || !data ? (
         <p>Loading…</p>
       ) : (
@@ -80,7 +113,7 @@ export function LocationsPage() {
                   {isAdmin ? (
                     <>
                       {/* TODO: inline edit control for name and address */}
-                      <button type="button" onClick={() => deleteLocation(loc.id).then(refresh)}>
+                      <button type="button" onClick={() => remove(loc)}>
                         Delete
                       </button>
                     </>
@@ -97,6 +130,7 @@ export function LocationsPage() {
       {isAdmin ? (
         <form onSubmit={handleAdd}>
           <h2>Add a location</h2>
+          {addError && <p role="alert">{addError}</p>}
           <input
             placeholder="New location name"
             value={name}
@@ -113,7 +147,9 @@ export function LocationsPage() {
           </label>
           <small>Indoor courts play in any weather, so no forecast is shown when arranging a match there.</small>
           <LocationMap address={address} label={name || "the new location"} />
-          <button type="submit">Add</button>
+          <button type="submit" disabled={adding || !name.trim()}>
+            {adding ? "Adding…" : "Add"}
+          </button>
         </form>
       ) : null}
     </div>
