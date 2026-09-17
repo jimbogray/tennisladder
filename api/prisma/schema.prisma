@@ -184,6 +184,9 @@ model Location {
   // Free-text postal address, normally filled in from Google Places autocomplete. Nullable
   // because locations created before addresses existed have none.
   address    String?
+  // Indoor courts are played whatever the weather, so the forecast is left out when arranging a
+  // match at one.
+  isIndoor   Boolean   @default(false)
   archivedAt DateTime?
 
   // Geocoding cache for the weather forecast, filled lazily on first forecast request.

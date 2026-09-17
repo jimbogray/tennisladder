@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchLocationForecast } from "../api/locations.js";
+import { fetchLocationForecast, fetchLocations } from "../api/locations.js";
 import { formatMatchDateTime } from "../lib/dateTime.js";
 import {
   describeWeather,
@@ -31,22 +31,28 @@ function RainChance({ percent }: { percent: number | null }) {
 
 /**
  * Forecast for the location being proposed: a week's outlook until a date and time are chosen,
- * then the hours around the match. Renders nothing until a location is picked.
+ * then the hours around the match. Renders nothing until a location is picked, and nothing at all
+ * for an indoor court, where the weather doesn't decide anything.
  *
  * `dateTime` is the picker's "YYYY-MM-DDTHH:mm" value, which is partial ("YYYY-MM-DDT") while
  * only a date has been chosen.
  */
 export function WeatherForecast({ locationId, dateTime }: { locationId: string; dateTime: string }) {
   const at = COMPLETE_DATE_TIME.test(dateTime) ? new Date(dateTime).toISOString() : undefined;
+  // Already in the cache: every screen that renders this has loaded the picker's locations.
+  const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: fetchLocations });
+  const isIndoor = locations?.find((loc) => loc.id === locationId)?.isIndoor ?? false;
   const { data, isLoading, isError } = useQuery({
     queryKey: ["locations", locationId, "forecast", at ?? null],
     queryFn: () => fetchLocationForecast(locationId, at),
-    enabled: Boolean(locationId),
+    // Don't ask for a forecast nobody will see. While the locations list is still loading this is
+    // false, so an indoor court never flashes one either.
+    enabled: Boolean(locationId) && Boolean(locations) && !isIndoor,
     staleTime: 10 * 60 * 1000,
     retry: 1,
   });
 
-  if (!locationId) return null;
+  if (!locationId || isIndoor) return null;
 
   const startHour = at ? Math.floor(new Date(at).getTime() / 3_600_000) : null;
 
