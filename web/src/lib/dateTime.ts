@@ -16,6 +16,11 @@ export function formatMatchDateTime(value: string | Date): string {
   });
 }
 
+/** Just the time of day, e.g. "11:30 AM" — for times already pinned to a date on screen. */
+export function formatTimeOfDay(value: string | Date): string {
+  return new Date(value).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 /** Formats a date the way datetime-local wants it: YYYY-MM-DDTHH:mm in the viewer's timezone. */
 export function toDateTimeLocal(value: Date | string): string {
   const date = new Date(value);

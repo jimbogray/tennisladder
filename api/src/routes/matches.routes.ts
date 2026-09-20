@@ -7,6 +7,8 @@ export const matchesRouter = Router();
 matchesRouter.get("/", requireAuth, matches.listMatches);
 matchesRouter.get("/mine", requireAuth, matches.myMatches);
 matchesRouter.get("/:id", requireAuth, matches.getMatch);
+// The caller's own journey to the match — see the travel-origin route below.
+matchesRouter.get("/:id/travel-plan", requireAuth, matches.getTravelPlan);
 
 // Proposing/responding to challenges requires ladder participation — coach-admins are
 // excluded even though they otherwise have full admin rights (see participatesInLadder on User).

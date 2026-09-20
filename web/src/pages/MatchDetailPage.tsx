@@ -21,6 +21,7 @@ import { ApiError } from "../api/client.js";
 import { formatMatchDateTime } from "../lib/dateTime.js";
 import { MatchStatusBadge } from "../components/MatchStatusBadge.js";
 import { ProposalForm } from "../components/ProposalForm.js";
+import { TravelPlan } from "../components/TravelPlan.js";
 import {
   defaultTravelOriginId,
   toTravelOriginAddressId,
@@ -231,6 +232,12 @@ export function MatchDetailPage() {
           </>
         ) : null}
       </dl>
+
+      {/* Only for a match that's actually arranged, and only for its players: the departure time
+          gives away where someone lives. */}
+      {isParticipant && data.status === "SCHEDULED" && data.scheduledDateTime ? (
+        <TravelPlan matchId={data.id} scheduledDateTime={data.scheduledDateTime} />
+      ) : null}
 
       {error ? <p role="alert">{error}</p> : null}
 

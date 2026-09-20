@@ -2,7 +2,8 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
-import { getLocationForecast, WeatherUnavailableError } from "../services/weatherService.js";
+import { getLocationForecast } from "../services/weatherService.js";
+import { UpstreamUnavailableError } from "../services/upstream.js";
 
 export const listLocations = asyncHandler(async (_req: Request, res: Response) => {
   const locations = await prisma.location.findMany({
@@ -27,7 +28,7 @@ export const getForecast = asyncHandler(async (req: Request, res: Response) => {
     }
     res.json(forecast);
   } catch (err) {
-    if (!(err instanceof WeatherUnavailableError)) throw err;
+    if (!(err instanceof UpstreamUnavailableError)) throw err;
     console.warn("Weather forecast unavailable:", err.message);
     res.status(502).json({ error: "The weather forecast is unavailable right now" });
   }

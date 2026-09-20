@@ -106,6 +106,35 @@ export type LocationForecastDto =
   | { status: "AVAILABLE"; days: ForecastDayDto[]; hours: ForecastHourDto[] }
   | { status: "NO_ADDRESS" | "ADDRESS_NOT_FOUND" | "OUT_OF_RANGE" };
 
+// Driving plan for one player's own journey to a scheduled match
+// (GET /api/matches/:id/travel-plan). Only ever returned to that player.
+//
+// NOT_SCHEDULED: the match isn't arranged yet, so there's no agreed time to arrive by.
+// NO_ORIGIN: the player hasn't said which saved address they're coming from.
+// ORIGIN_NOT_FOUND / DESTINATION_NOT_FOUND: that address couldn't be placed on the map.
+// NO_DESTINATION_ADDRESS: the court has no address recorded.
+// NO_ROUTE: both ends were found, but there's no road route between them.
+export type MatchTravelPlanDto =
+  | {
+      status: "AVAILABLE";
+      // The saved address the player said they're coming from.
+      origin: UserAddressDto;
+      // ISO instant, rounded down to a quarter hour so the rounding always buys time.
+      departureTime: string;
+      // Driving time the departure was worked back from, in whole minutes. Free-flowing traffic:
+      // routing is done without live conditions.
+      drivingMinutes: number;
+    }
+  | {
+      status:
+        | "NOT_SCHEDULED"
+        | "NO_ORIGIN"
+        | "ORIGIN_NOT_FOUND"
+        | "NO_DESTINATION_ADDRESS"
+        | "DESTINATION_NOT_FOUND"
+        | "NO_ROUTE";
+    };
+
 export interface MatchEventDto {
   id: string;
   type: MatchEventType;

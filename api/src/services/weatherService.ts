@@ -1,18 +1,16 @@
 import type { ForecastDayDto, ForecastHourDto, LocationForecastDto } from "@tennisladder/shared";
-import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
+import { geocodeLocation, type Coordinates } from "./geocodingService.js";
+import { getJson } from "./upstream.js";
 
 /**
  * Weather forecasts for match locations.
  *
- * Forecasts come from Open-Meteo and addresses are geocoded with OpenStreetMap's Nominatim — both
- * free and keyless. Nominatim's usage policy caps clients at one request per second and requires
- * results to be cached, so coordinates are stored on the Location and only looked up again when
- * its address changes.
+ * Forecasts come from Open-Meteo, which is free and keyless; addresses are turned into
+ * coordinates by geocodingService, which caches them on the Location.
  */
 
 const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
-const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 
 // Open-Meteo's maximum. A match further out than this has no forecast yet.
 const FORECAST_DAYS = 16;
@@ -23,74 +21,6 @@ const WINDOW_HOURS_BEFORE = 2;
 const WINDOW_HOURS_AFTER = 3;
 
 const FORECAST_CACHE_TTL_MS = 30 * 60 * 1000;
-const UPSTREAM_TIMEOUT_MS = 8000;
-const NOMINATIM_MIN_INTERVAL_MS = 1100;
-// Nominatim rejects requests without an identifying User-Agent.
-const USER_AGENT = `PlayMoreTennisLadder/1.0 (+${env.webAppUrl})`;
-
-/** A provider was unreachable or returned an error — distinct from "no forecast exists". */
-export class WeatherUnavailableError extends Error {}
-
-interface Coordinates {
-  latitude: number;
-  longitude: number;
-}
-
-async function getJson(url: URL): Promise<unknown> {
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    });
-  } catch (err) {
-    throw new WeatherUnavailableError(`Request to ${url.host} failed: ${String(err)}`);
-  }
-  if (!res.ok) {
-    throw new WeatherUnavailableError(`${url.host} responded ${res.status}`);
-  }
-  return res.json();
-}
-
-let nextNominatimSlot = 0;
-
-/** Spaces Nominatim requests at least NOMINATIM_MIN_INTERVAL_MS apart across the process. */
-async function waitForNominatimSlot(): Promise<void> {
-  const now = Date.now();
-  const slot = Math.max(now, nextNominatimSlot);
-  nextNominatimSlot = slot + NOMINATIM_MIN_INTERVAL_MS;
-  if (slot > now) await new Promise((resolve) => setTimeout(resolve, slot - now));
-}
-
-/**
- * Coordinates for a free-text address, or null if it can't be found. Throws
- * WeatherUnavailableError when Nominatim itself fails, so a transient outage isn't cached as
- * "not found".
- *
- * Addresses come from Google Places, which knows buildings and street numbers OpenStreetMap often
- * doesn't ("1 Tennis Court Rd, Wimbledon, London SW19 5AE, UK" finds nothing). On a miss, retry
- * with the leading part dropped — "Wimbledon, London SW19 5AE, UK" is still far more precise than
- * a weather forecast needs.
- */
-async function geocode(address: string): Promise<Coordinates | null> {
-  const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
-  // Never broaden down to a lone trailing part, which is usually just the country.
-  const attempts = Math.max(1, Math.min(3, parts.length - 1));
-
-  for (let i = 0; i < attempts; i++) {
-    const url = new URL(NOMINATIM_URL);
-    url.searchParams.set("q", parts.slice(i).join(", ") || address);
-    url.searchParams.set("format", "jsonv2");
-    url.searchParams.set("limit", "1");
-
-    await waitForNominatimSlot();
-    const results = (await getJson(url)) as { lat: string; lon: string }[];
-    if (results.length > 0) {
-      return { latitude: Number(results[0].lat), longitude: Number(results[0].lon) };
-    }
-  }
-  return null;
-}
 
 interface OpenMeteoResponse {
   utc_offset_seconds: number;
@@ -191,21 +121,12 @@ export async function getLocationForecast(
     omit: { latitude: false, longitude: false, geocodedAddress: false },
   });
   if (!location) return null;
-  if (!location.address) return { status: "NO_ADDRESS" };
 
-  let { latitude, longitude } = location;
-  if (location.geocodedAddress !== location.address) {
-    const coordinates = await geocode(location.address);
-    latitude = coordinates?.latitude ?? null;
-    longitude = coordinates?.longitude ?? null;
-    await prisma.location.update({
-      where: { id: location.id },
-      data: { latitude, longitude, geocodedAddress: location.address },
-    });
-  }
-  if (latitude === null || longitude === null) return { status: "ADDRESS_NOT_FOUND" };
+  const geocoded = await geocodeLocation(location);
+  if (geocoded.status === "NO_ADDRESS") return { status: "NO_ADDRESS" };
+  if (geocoded.status === "NOT_FOUND") return { status: "ADDRESS_NOT_FOUND" };
 
-  const data = await fetchForecast({ latitude, longitude });
+  const data = await fetchForecast(geocoded.coordinates);
   if (!at) return { status: "AVAILABLE", days: outlookDays(data), hours: [] };
 
   const hours = hoursAround(data, at);

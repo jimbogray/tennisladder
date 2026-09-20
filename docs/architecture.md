@@ -36,14 +36,14 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 
 - **User**: id, firstName, lastName, email (unique), passwordHash?, googleId? (unique), ustaRating? (Decimal 2,1, nullable — required for Players, null for coach-admins), role (PLAYER|ADMIN), participatesInLadder (Boolean, default true — false for coach-admins; drives ladder visibility and challenge eligibility), points (default 0, unused/always 0 for non-participants), registrationCodeId, emailVerifiedAt?, profileCompletedAt? (for Google-first signups needing USTA rating + code), removedAt? (soft delete when an admin removes the user from the team — the row stays so match history keeps its references; removed users can't sign in and are excluded from the team list, ladder and challenge picker).
 - **RegistrationCode**: id, code (4-digit string), createdByAdminId, usedAt?, createdAt, expiresAt (createdAt + 48h). Active-code uniqueness enforced via a **raw-SQL partial unique index** (`WHERE used_at IS NULL`) added in a hand-edited migration, since Prisma schema syntax has no `WHERE` clause for `@@unique`. Expiry checked at redemption time, not via the index.
-- **Location**: id, name (unique), address?, archivedAt? (soft delete to preserve historical match references), latitude?/longitude?/geocodedAddress? (geocoding cache for the weather forecast — see below).
+- **Location**: id, name (unique), address?, archivedAt? (soft delete to preserve historical match references), latitude?/longitude?/geocodedAddress? (geocoding cache for the weather forecast and driving times — see below).
 - **Match**: id, challengerId, opponentId, status (enum, see below), proposedDateTime (DateTime), proposedLocationId, proposedComment?, awaitingResponseFromUserId, scheduledDateTime?, resultReportedByUserId?, winnerId?, loserId?, pointsAwarded?, resultConfirmedAt?, isAdminOverride, reminderSentAt? / staleResultReminderSentAt? (job idempotency flags).
 - **MatchEvent**: id, matchId, type (enum: PROPOSED, COUNTER_PROPOSED, ACCEPTED, DECLINED, RESULT_SUBMITTED, RESULT_CONFIRMED, RESULT_DISPUTED, ADMIN_OVERRIDE_RESULT, ADMIN_CANCELLED), actorUserId?, snapshotDateTime?/snapshotLocationId?/comment? (negotiation events), resultOutcome? (result events), createdAt. Indexed on `(matchId, createdAt)` — **this table is the chronological comment/negotiation thread**, rendered on-site and re-embedded in every notification email.
 - **MatchResultToken**: id, matchId, userId, outcome (WON|LOST), token (unique random string), usedAt?. One row per (match, user, outcome) — this is what the "I won"/"I lost" email links resolve against. All unused tokens for a match are voided the moment it reaches COMPLETED.
 - **RefreshToken**: id, userId, tokenHash (unique, store hash not raw), expiresAt, revokedAt?.
 - **PointsAdjustment**: id, userId, adjustedByAdminId, previousPoints, newPoints, reason? — audit trail for admin manual point overrides.
 - **PasswordResetToken**: id, userId, tokenHash (unique), expiresAt, usedAt? — supports the added password-reset flow.
-- **UserAddress**: id, userId, label (unique per user, also compared case-insensitively), address — places a user travels to matches from (see Saved Addresses below).
+- **UserAddress**: id, userId, label (unique per user, also compared case-insensitively), address, latitude?/longitude?/geocodedAddress? (the same lazy geocoding cache `Location` carries) — places a user travels to matches from (see Saved Addresses below).
 - **MatchTravelOrigin**: id, matchId, userId, addressId — which saved address one player is coming from for one match, unique per (match, user).
 
 ## Match State Machine
@@ -82,26 +82,51 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 - **Team**: `GET /api/admin/users` (every registered user who hasn't been removed, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id` (Admin). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
 - **Weather**: `GET /api/locations/:id/forecast[?at=<ISO>]` (Player/Admin) — a 7-day outlook, or with `at` the hours around a match time. Shown on the propose/amend/counter forms.
-- **Matches**: `GET /api/matches?filter=all|completed|pending`, `POST /api/matches` (propose — server rejects if either challenger or opponent has `participatesInLadder=false`), `GET /api/matches/:id`, `GET /api/matches/mine`, `POST /api/matches/:id/{counter,accept,decline}`, `PUT /api/matches/:id/travel-origin` (the caller's own, upcoming matches only), `GET /api/admin/matches/pending` (Admin).
+- **Travel**: `GET /api/matches/:id/travel-plan` (the caller's own journey only) — when to leave for a scheduled match. Shown on the match page.
+- **Matches**: `GET /api/matches?filter=all|completed|pending`, `POST /api/matches` (propose — server rejects if either challenger or opponent has `participatesInLadder=false`), `GET /api/matches/:id`, `GET /api/matches/mine`, `POST /api/matches/:id/{counter,accept,decline}`, `PUT /api/matches/:id/travel-origin` (the caller's own, upcoming matches only), `GET /api/matches/:id/travel-plan` (the caller's own departure time), `GET /api/admin/matches/pending` (Admin).
 - **Results**: `POST /api/matches/:id/result` (web), `GET`/`POST /api/results/token/:token` (public — token is the credential), `POST /api/admin/matches/:id/override-result` (Admin).
 
 ## Weather Forecast
 
 The match proposal forms show the forecast for the chosen location: a 7-day outlook, narrowing to the hours around the match (2 before, 3 after) once a date and time are picked.
 
-- **Providers** — both free and keyless, called server-side from `api/src/services/weatherService.ts`, so the SPA never depends on their response shapes. Forecasts come from **Open-Meteo** (16-day horizon; the free tier is licensed for non-commercial use and requires the attribution link the UI shows — commercial use needs their paid API). Addresses are geocoded with OpenStreetMap's **Nominatim**, whose usage policy requires an identifying User-Agent, at most one request per second, and caching of results.
-- **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for weather.
+- **Providers** — both free and keyless, called server-side from `api/src/services/weatherService.ts` (geocoding via the shared `geocodingService.ts`, HTTP via `upstream.ts`), so the SPA never depends on their response shapes. Forecasts come from **Open-Meteo** (16-day horizon; the free tier is licensed for non-commercial use and requires the attribution link the UI shows — commercial use needs their paid API). Addresses are geocoded with OpenStreetMap's **Nominatim**, whose usage policy requires an identifying User-Agent, at most one request per second, and caching of results.
+- **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for both weather and a driving estimate. `UserAddress` carries the same three columns and goes through the same `geocodingService.ts` helpers.
 - **Forecast responses are cached in memory for 30 minutes per location**, which relies on the same single-replica assumption as the scheduled jobs (a second replica would only mean more upstream calls, not incorrect data).
 - Units are always metric in the API; the SPA converts to °F/mph for US-region locales.
 
 ## Saved Addresses
 
-Users save labelled addresses (Home, Office, or a custom label) at registration or on their profile, using the same Places autocomplete as the Locations page. When proposing, amending, countering or accepting a match, and later on a scheduled match, a player can pick which one they're coming from. This is groundwork for driving directions and travel alerts.
+Users save labelled addresses (Home, Office, or a custom label) at registration or on their profile, using the same Places autocomplete as the Locations page. When proposing, amending, countering or accepting a match, and later on a scheduled match, a player can pick which one they're coming from. Once the match is scheduled, that choice drives the departure time (see Driving Times below).
 
 - **Private to the user.** Addresses are only reachable through `/players/me/addresses`, and a match's travel origin comes back only as `myTravelOrigin` on `GET /api/matches/:id`, always for the requesting user. Admins can't see either.
 - **Origins live in `MatchTravelOrigin`, not on `Match`.** Match rows are returned whole to both players and in the public match lists, so a column there would leak. For the same reason, choosing an origin writes no `MatchEvent`: the event thread is shown to both players and embedded in emails.
 - **Request semantics.** The propose, amend, counter and accept bodies take an optional `travelOriginAddressId`. If it's omitted, the current choice stays; `null` clears it; an id must belong to the caller. The SPA omits it while addresses are still loading, so a fast submit can't clear an earlier choice.
-- **Addresses are referenced, not copied.** Deleting an address cascades to the origins that used it. Addresses aren't geocoded yet; directions will need that, and it can follow the lazy cache pattern `Location` uses.
+- **Addresses are referenced, not copied.** Deleting an address cascades to the origins that used it, and with it the departure time worked out from it.
+
+## Driving Times
+
+A scheduled match's page tells each player when to leave to arrive before it starts
+(`api/src/services/travelService.ts`, `GET /api/matches/:id/travel-plan`).
+
+- **Departure is rounded *down* to a quarter hour.** The routing engine works in free-flowing road
+  speeds with no live traffic, so the discarded minutes are the slack that makes "arrive before the
+  start" hold up. Flooring the instant lands on a local quarter hour too: every timezone offset in
+  use is a whole number of quarter hours, the same assumption the 15-minute match grid relies on.
+- **Routing is OSRM**, free and keyless like the weather providers, defaulting to the project's
+  public demo server and overridable with `ROUTING_BASE_URL` for a self-hosted instance. Durations
+  are cached in memory for 6 hours per rounded coordinate pair — road distances don't change, and
+  the one thing that does (traffic) isn't modelled anyway.
+- **Both ends are geocoded lazily**, the player's saved address exactly like the location
+  (see Weather Forecast above), so a departure time costs no upstream calls once both are cached.
+- **Private, and scheduled matches only.** The endpoint answers only for the requesting player and
+  only from their own travel origin — a departure time reveals roughly where someone lives, so a
+  non-participant gets the same 404 as for a match that doesn't exist. Before a match is agreed
+  there's no time to arrive by, so the endpoint reports `NOT_SCHEDULED` rather than guessing from
+  a proposal that can still move.
+- **Every "no departure time" case is a named status**, not an error: no origin chosen, no address
+  on the location, either end unfindable, or no road route between them. Only an upstream failure
+  is a 502, which the SPA renders as "unavailable right now" rather than a broken page.
 
 ## React App Structure
 
