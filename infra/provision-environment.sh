@@ -217,8 +217,20 @@ if [ "$ENVIRONMENT" = "staging" ]; then
   ENV_VARS+=("LOG_EMAIL_LINKS=true")
 fi
 info "Setting app configuration (WEB_APP_URL=${SITE_URL})"
-run az containerapp update --resource-group "$RG" --name "$API_APP" \
-  --set-env-vars "${ENV_VARS[@]}" --output none
+# A secretref env var reads identically before and after a rotation, so changing a secret's value
+# produces no new revision — and Container Apps binds secret values into a revision when it is
+# created, so the running container would go on serving the old value. Restarting the revision
+# doesn't help either; only a new revision re-reads them (TL-21). Runs that wrote no secrets stay
+# revision-neutral, so re-provisioning an unchanged environment remains a no-op.
+if [ -n "$SECRET_NAMES" ]; then
+  REVISION_SUFFIX="cfg-$(date -u +%Y%m%d%H%M%S)"
+  info "Secrets changed — rolling a new revision (${REVISION_SUFFIX}) so the app picks them up"
+  run az containerapp update --resource-group "$RG" --name "$API_APP" \
+    --set-env-vars "${ENV_VARS[@]}" --revision-suffix "$REVISION_SUFFIX" --output none
+else
+  run az containerapp update --resource-group "$RG" --name "$API_APP" \
+    --set-env-vars "${ENV_VARS[@]}" --output none
+fi
 
 # --- Site: Static Web App ---------------------------------------------------------------------
 if az staticwebapp show --resource-group "$RG" --name "$SWA_NAME" --output none 2>/dev/null; then

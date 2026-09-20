@@ -261,6 +261,28 @@ Leave them unset and Google sign-in is simply off for that environment: the endp
 with a message, `GET /api/auth/providers` reports `google: false`, and the site hides the button.
 Use a separate OAuth client per environment, the way each already has its own JWT secrets.
 
+### Rotating a secret
+
+Container App secrets are bound into a revision when it is created, so **changing a secret's value
+doesn't reach the running app on its own** — and restarting the revision doesn't either. Only a new
+revision re-reads them. The symptom is silent: `az containerapp secret show` reports the new value
+while the app keeps using the old one.
+
+Re-running `provision-environment.sh` handles this: when it writes a secret it rolls a new revision
+(`--revision-suffix cfg-<timestamp>`). So to rotate the database password, the email connection
+string, or the Google credentials, re-run provisioning with the new value rather than reaching for
+`az containerapp secret set` directly.
+
+If you do set one by hand, follow it with:
+
+```bash
+az containerapp update --resource-group tennisladder-staging-rg \
+  --name tennisladder-staging-api --revision-suffix rotate1
+```
+
+The suffix has to be one you haven't used before. In single-revision mode traffic moves to the new
+revision automatically; the old one may stay active for a few minutes before it drains.
+
 ### 10. Production email
 
 Create Communication Services, connect `playmore.tennis` as a sending domain (it adds more TXT
