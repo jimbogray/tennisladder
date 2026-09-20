@@ -386,6 +386,50 @@ export async function cancelMatch(matchId: string, actingUserId: string, comment
   });
 }
 
+/**
+ * An admin calls off someone else's match: a negotiation that has stalled, or an arranged match
+ * that can't go ahead. Allowed from NEGOTIATING and SCHEDULED only — once a score is in play the
+ * dispute and override paths own the match instead.
+ *
+ * "Deleting" here is the same soft removal the rest of the app uses (Location.archivedAt,
+ * User.removedAt): the row stays, the status becomes CANCELLED, and the ADMIN_CANCELLED event
+ * records who did it and why, so both players still see what happened in the match thread.
+ */
+export async function adminCancelMatch(matchId: string, adminUserId: string, comment?: string) {
+  const match = await prisma.match.findUnique({ where: { id: matchId } });
+  if (!match) {
+    throw new MatchValidationError("Match not found");
+  }
+
+  if (match.status !== MatchStatus.NEGOTIATING && match.status !== MatchStatus.SCHEDULED) {
+    throw new MatchValidationError("Only a match that's still being arranged or scheduled can be cancelled");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // awaitingResponseFromUserId is left as it was — it's non-nullable, and every other terminal
+    // transition here leaves it behind too, since status alone decides whether anyone owes a reply.
+    const updated = await tx.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.CANCELLED,
+        cancellationComment: comment ?? null,
+        lastActionAt: new Date(),
+      },
+    });
+
+    await tx.matchEvent.create({
+      data: {
+        matchId,
+        type: MatchEventType.ADMIN_CANCELLED,
+        actorUserId: adminUserId,
+        comment,
+      },
+    });
+
+    return updated;
+  });
+}
+
 export type ResultOutcomeInput = "WON" | "LOST" | "TIED";
 
 /**

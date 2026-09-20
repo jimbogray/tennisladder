@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PublicUserDto, ResultOutcome } from "@tennisladder/shared";
 import {
   acceptMatch,
+  adminCancelMatch,
   amendProposal,
   cancelMatch,
   counterPropose,
@@ -43,6 +44,7 @@ type Mode =
   | "amend"
   | "counter"
   | "cancel"
+  | "admin-cancel"
   | "withdraw"
   | "report-result"
   | "amend-result"
@@ -61,6 +63,11 @@ const REASON_FORMS = {
     prompt: "Why are you withdrawing? (optional)",
     confirm: "Withdraw proposal",
     submit: withdrawMatch,
+  },
+  "admin-cancel": {
+    prompt: "Why are you calling this match off? (optional — both players will see it)",
+    confirm: "Cancel this match",
+    submit: adminCancelMatch,
   },
   "reject-result": {
     prompt: "Why is this score wrong? (optional)",
@@ -139,6 +146,9 @@ export function MatchDetailPage() {
   const iReportedScore = scorePending && !isMyTurn;
 
   const upcoming = negotiating || data.status === "SCHEDULED";
+  // An admin can call off a match they're not in. An admin who *is* a player in it uses the normal
+  // participant controls above, so a match never shows two competing cancel buttons.
+  const canAdminCancel = user?.role === "ADMIN" && !isParticipant && upcoming;
   const travelOriginId = travelOrigin ?? defaultTravelOriginId(addresses, data.myTravelOrigin);
   // Undefined while addresses are loading leaves the saved choice untouched.
   const travelOriginAddressId = addresses ? toTravelOriginAddressId(travelOriginId) : undefined;
@@ -355,6 +365,16 @@ export function MatchDetailPage() {
           ) : null}
           <button type="button" className="button-danger" onClick={() => setMode("cancel")}>
             Cancel match
+          </button>
+        </div>
+      ) : null}
+
+      {/* Admin clearing out a stalled negotiation, or an arranged match that can't go ahead. The
+          match stays in both players' history as CANCELLED, with the reason on the status badge. */}
+      {canAdminCancel && mode === "none" ? (
+        <div className="form-actions">
+          <button type="button" className="button-danger" onClick={() => setMode("admin-cancel")}>
+            Cancel this match
           </button>
         </div>
       ) : null}
