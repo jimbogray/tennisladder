@@ -82,7 +82,7 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 - **Team**: `GET /api/admin/users` (every registered user who hasn't been removed, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id` (Admin). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
 - **Weather**: `GET /api/locations/:id/forecast[?at=<ISO>]` (Player/Admin) — a 7-day outlook, or with `at` the hours around a match time. Shown on the propose/amend/counter forms.
-- **Travel**: `GET /api/matches/:id/travel-plan` (the caller's own journey only) — when to leave for a scheduled match. Shown on the match page.
+- **Travel**: `GET /api/matches/:id/travel-plan` (the caller's own journey only) — when to leave for a scheduled match, shown on the match page. `GET /api/travel/departure?addressId=&locationId=&at=` answers the same question for a match that doesn't exist yet, from one of the caller's own saved addresses — shown on the propose/amend/counter forms.
 - **Matches**: `GET /api/matches?filter=all|completed|pending`, `POST /api/matches` (propose — server rejects if either challenger or opponent has `participatesInLadder=false`), `GET /api/matches/:id`, `GET /api/matches/mine`, `POST /api/matches/:id/{counter,accept,decline}`, `PUT /api/matches/:id/travel-origin` (the caller's own, upcoming matches only), `GET /api/matches/:id/travel-plan` (the caller's own departure time), `GET /api/admin/matches/pending` (Admin).
 - **Results**: `POST /api/matches/:id/result` (web), `GET`/`POST /api/results/token/:token` (public — token is the credential), `POST /api/admin/matches/:id/override-result` (Admin).
 
@@ -106,8 +106,11 @@ Users save labelled addresses (Home, Office, or a custom label) at registration 
 
 ## Driving Times
 
-A scheduled match's page tells each player when to leave to arrive before it starts
-(`api/src/services/travelService.ts`, `GET /api/matches/:id/travel-plan`).
+A scheduled match's page tells each player when to leave to arrive before it starts, and the
+propose/amend/counter forms answer the same question for the slot being drafted, so a player can
+see what a time or a set of courts would cost them before offering it
+(`api/src/services/travelService.ts`; `GET /api/matches/:id/travel-plan` and
+`GET /api/travel/departure`, which share one `planJourney` core).
 
 - **Departure is rounded *down* to a quarter hour.** The routing engine works in free-flowing road
   speeds with no live traffic, so the discarded minutes are the slack that makes "arrive before the
@@ -119,11 +122,18 @@ A scheduled match's page tells each player when to leave to arrive before it sta
   the one thing that does (traffic) isn't modelled anyway.
 - **Both ends are geocoded lazily**, the player's saved address exactly like the location
   (see Weather Forecast above), so a departure time costs no upstream calls once both are cached.
+- **A drive over 8 hours is reported as `TOO_FAR`, not as a departure time.** A club ladder's
+  matches are local, so a journey that long means an address landed on the wrong continent rather
+  than that anyone is really driving it — a location addressed "Flushing Meadows" geocodes to a
+  housing development of that name in Bangalore. The forecast has the same exposure and no such
+  guard; it just shows the wrong city's weather.
 - **Private, and scheduled matches only.** The endpoint answers only for the requesting player and
   only from their own travel origin — a departure time reveals roughly where someone lives, so a
   non-participant gets the same 404 as for a match that doesn't exist. Before a match is agreed
-  there's no time to arrive by, so the endpoint reports `NOT_SCHEDULED` rather than guessing from
-  a proposal that can still move.
+  there's no time to arrive by, so the match endpoint reports `NOT_SCHEDULED` rather than guessing
+  from a proposal that can still move — the draft on a proposal form asks `/api/travel/departure`
+  with the time it's actually offering instead, and that endpoint answers only for addresses that
+  belong to the caller (anyone else's is a 404, never a named address).
 - **Every "no departure time" case is a named status**, not an error: no origin chosen, no address
   on the location, either end unfindable, or no road route between them. Only an upstream failure
   is a 502, which the SPA renders as "unavailable right now" rather than a broken page.

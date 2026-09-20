@@ -21,6 +21,16 @@ export function formatTimeOfDay(value: string | Date): string {
   return new Date(value).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+const COMPLETE_DATE_TIME_LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+/**
+ * Whether a date-and-time picker's value names an actual instant. Its value is partial
+ * ("YYYY-MM-DDT") while only the date has been chosen, which `new Date(...)` reads as NaN.
+ */
+export function isCompleteDateTimeLocal(value: string): boolean {
+  return COMPLETE_DATE_TIME_LOCAL.test(value);
+}
+
 /** Formats a date the way datetime-local wants it: YYYY-MM-DDTHH:mm in the viewer's timezone. */
 export function toDateTimeLocal(value: Date | string): string {
   const date = new Date(value);

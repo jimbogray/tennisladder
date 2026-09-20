@@ -106,15 +106,16 @@ export type LocationForecastDto =
   | { status: "AVAILABLE"; days: ForecastDayDto[]; hours: ForecastHourDto[] }
   | { status: "NO_ADDRESS" | "ADDRESS_NOT_FOUND" | "OUT_OF_RANGE" };
 
-// Driving plan for one player's own journey to a scheduled match
-// (GET /api/matches/:id/travel-plan). Only ever returned to that player.
+// One player's own driving plan for a journey to a match — for a match that's already arranged
+// (GET /api/matches/:id/travel-plan) or for one being proposed
+// (GET /api/travel/departure?addressId=&locationId=&at=). Only ever returned to that player.
 //
-// NOT_SCHEDULED: the match isn't arranged yet, so there's no agreed time to arrive by.
-// NO_ORIGIN: the player hasn't said which saved address they're coming from.
 // ORIGIN_NOT_FOUND / DESTINATION_NOT_FOUND: that address couldn't be placed on the map.
 // NO_DESTINATION_ADDRESS: the court has no address recorded.
 // NO_ROUTE: both ends were found, but there's no road route between them.
-export type MatchTravelPlanDto =
+// TOO_FAR: the route is far too long to be a club match, which means an address was placed on the
+// wrong continent rather than that anyone is really driving that far.
+export type TravelPlanDto =
   | {
       status: "AVAILABLE";
       // The saved address the player said they're coming from.
@@ -127,13 +128,17 @@ export type MatchTravelPlanDto =
     }
   | {
       status:
-        | "NOT_SCHEDULED"
-        | "NO_ORIGIN"
         | "ORIGIN_NOT_FOUND"
         | "NO_DESTINATION_ADDRESS"
         | "DESTINATION_NOT_FOUND"
-        | "NO_ROUTE";
+        | "NO_ROUTE"
+        | "TOO_FAR";
     };
+
+// The match-scoped endpoint has two more ways to have nothing to say.
+// NOT_SCHEDULED: the match isn't arranged yet, so there's no agreed time to arrive by.
+// NO_ORIGIN: the player hasn't said which saved address they're coming from.
+export type MatchTravelPlanDto = TravelPlanDto | { status: "NOT_SCHEDULED" | "NO_ORIGIN" };
 
 export interface MatchEventDto {
   id: string;

@@ -4,6 +4,7 @@ import { playersRouter, adminPlayersRouter } from "./players.routes.js";
 import { locationsRouter, adminLocationsRouter } from "./locations.routes.js";
 import { matchesRouter, adminMatchesRouter } from "./matches.routes.js";
 import { resultsRouter } from "./results.routes.js";
+import { travelRouter } from "./travel.routes.js";
 import { adminRegistrationCodesRouter, adminUsersRouter } from "./admin.routes.js";
 
 export const apiRouter = Router();
@@ -15,6 +16,7 @@ apiRouter.use("/players", playersRouter);
 apiRouter.use("/locations", locationsRouter);
 apiRouter.use("/matches", matchesRouter);
 apiRouter.use("/results", resultsRouter);
+apiRouter.use("/travel", travelRouter);
 
 apiRouter.use("/admin/players", adminPlayersRouter);
 apiRouter.use("/admin/locations", adminLocationsRouter);

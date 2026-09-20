@@ -9,6 +9,7 @@ import { LocationPicker } from "../components/LocationPicker.js";
 import { ApiError } from "../api/client.js";
 import { MatchDateTimePicker } from "../components/MatchDateTimePicker.js";
 import { WeatherForecast } from "../components/WeatherForecast.js";
+import { DeparturePreview } from "../components/TravelPlan.js";
 import { fetchMyAddresses } from "../api/addresses.js";
 import {
   defaultTravelOriginId,
@@ -67,6 +68,11 @@ export function NewMatchPage() {
         addresses={addresses}
         value={travelOriginId}
         onChange={setTravelOrigin}
+      />
+      <DeparturePreview
+        addressId={travelOriginId}
+        locationId={proposedLocationId}
+        dateTime={proposedDateTime}
       />
       <textarea
         placeholder="Optional comment"
