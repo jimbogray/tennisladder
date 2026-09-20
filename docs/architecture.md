@@ -35,7 +35,7 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 ## Database Schema (Prisma) — core models
 
 - **User**: id, firstName, lastName, email (unique), passwordHash?, googleId? (unique), ustaRating? (Decimal 2,1, nullable — required for Players, null for coach-admins), role (PLAYER|ADMIN), participatesInLadder (Boolean, default true — false for coach-admins; drives ladder visibility and challenge eligibility), points (default 0, unused/always 0 for non-participants), registrationCodeId, emailVerifiedAt?, profileCompletedAt? (for Google-first signups needing USTA rating + code), removedAt? (soft delete when an admin removes the user from the team — the row stays so match history keeps its references; removed users can't sign in and are excluded from the team list, ladder and challenge picker).
-- **RegistrationCode**: id, code (4-digit string), createdByAdminId, usedAt?, createdAt, expiresAt (createdAt + 48h). Active-code uniqueness enforced via a **raw-SQL partial unique index** (`WHERE used_at IS NULL`) added in a hand-edited migration, since Prisma schema syntax has no `WHERE` clause for `@@unique`. Expiry checked at redemption time, not via the index.
+- **RegistrationCode**: id, code (6-digit string), createdByAdminId, invitedEmail? (set when issued by email; enforced at redemption, so only that address can use the code), usedAt?, createdAt, expiresAt (createdAt + 48h). Active-code uniqueness enforced via a **raw-SQL partial unique index** (`WHERE used_at IS NULL`) added in a hand-edited migration, since Prisma schema syntax has no `WHERE` clause for `@@unique`. Expiry checked at redemption time, not via the index.
 - **Location**: id, name (unique), address?, archivedAt? (soft delete to preserve historical match references), latitude?/longitude?/geocodedAddress? (geocoding cache for the weather forecast and driving times — see below).
 - **Match**: id, challengerId, opponentId, status (enum, see below), proposedDateTime (DateTime), proposedLocationId, proposedComment?, awaitingResponseFromUserId, scheduledDateTime?, resultReportedByUserId?, winnerId?, loserId?, pointsAwarded?, resultConfirmedAt?, isAdminOverride, reminderSentAt? / staleResultReminderSentAt? (job idempotency flags).
 - **MatchEvent**: id, matchId, type (enum: PROPOSED, COUNTER_PROPOSED, ACCEPTED, DECLINED, RESULT_SUBMITTED, RESULT_CONFIRMED, RESULT_DISPUTED, ADMIN_OVERRIDE_RESULT, ADMIN_CANCELLED), actorUserId?, snapshotDateTime?/snapshotLocationId?/comment? (negotiation events), resultOutcome? (result events), createdAt. Indexed on `(matchId, createdAt)` — **this table is the chronological comment/negotiation thread**, rendered on-site and re-embedded in every notification email.
@@ -211,7 +211,9 @@ Prisma models and route/controller/service files land as typed stubs (correct si
 - Reschedule after `SCHEDULED`: unsupported in V1 (no reschedule path).
 - Result-token expiry: none — single-use only, voided on match completion.
 - Admin notified on dispute: no extra email, surfaces on existing dashboard.
-- Registration codes are generic (not bound to a specific invitee's email).
+- Registration codes generated for manual handout are generic (anyone holding the code can
+  redeem it); a code issued by emailing an invite carries `invitedEmail` and only that
+  address can redeem it.
 - Coach-admin accounts can be created from an Admin or Player-and-Admin invite, and an existing user's account type can be changed on the admin Team page (`/admin/team`); `scripts/create-admin.ts` remains the bootstrap path for the first admin.
 
 ## Verification

@@ -6,6 +6,15 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:web"],
       "port": 5173
+    },
+    {
+      "name": "app",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "(PORT=4000 WEB_APP_URL=http://localhost:5173 npm run dev:api &) && npm run dev --workspace=@tennisladder/web -- --port 5173 --strictPort"
+      ],
+      "port": 5173
     }
   ]
 }

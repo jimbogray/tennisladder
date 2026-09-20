@@ -71,7 +71,7 @@ const registerSchema = z.object({
   email: z.string().email("Enter a valid email address"),
   password: passwordSchema,
   ustaRating: z.string().optional(),
-  registrationCode: z.string().length(4, "Registration code must be 4 digits"),
+  registrationCode: z.string().length(6, "Registration code must be 6 digits"),
   // Optional places the new user travels from; they can also be added later on the profile page.
   addresses: addressListSchema.optional(),
 });
@@ -88,7 +88,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
   let code;
   try {
-    code = await redeemRegistrationCode(data.registrationCode);
+    code = await redeemRegistrationCode(data.registrationCode, email);
   } catch (err) {
     if (err instanceof RegistrationCodeError) {
       res.status(400).json({ error: err.message });
@@ -270,7 +270,7 @@ async function linkOrCreateGoogleUser(profile: {
 }
 
 const completeProfileSchema = z.object({
-  registrationCode: z.string().length(4, "Registration code must be 4 digits"),
+  registrationCode: z.string().length(6, "Registration code must be 6 digits"),
   ustaRating: z.union([z.enum(USTA_RATINGS), z.literal(""), z.null()]).optional(),
 });
 
@@ -290,7 +290,7 @@ export const completeProfile = asyncHandler(async (req: Request, res: Response) 
 
   let code;
   try {
-    code = await redeemRegistrationCode(registrationCode);
+    code = await redeemRegistrationCode(registrationCode, existing.email);
   } catch (err) {
     if (err instanceof RegistrationCodeError) {
       res.status(400).json({ error: err.message });
