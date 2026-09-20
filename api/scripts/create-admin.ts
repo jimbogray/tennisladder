@@ -53,7 +53,13 @@ async function main() {
     // ladder must not quietly remove them from it.
     await prisma.user.update({
       where: { id: existing.id },
-      data: { role: "ADMIN", passwordHash },
+      data: {
+        role: "ADMIN",
+        passwordHash,
+        // An account promoted by hand is meant to work straight away, even if it arrived through
+        // Google and never redeemed an invite code.
+        profileCompletedAt: existing.profileCompletedAt ?? new Date(),
+      },
     });
     console.log(
       `Promoted existing account ${email} to admin and reset its password ` +

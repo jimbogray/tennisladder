@@ -37,7 +37,7 @@ export function App() {
       <Route
         path="/complete-profile"
         element={
-          <RequireAuth>
+          <RequireAuth allowIncompleteProfile>
             <CompleteProfilePage />
           </RequireAuth>
         }

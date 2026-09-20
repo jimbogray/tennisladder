@@ -1,14 +1,18 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { login } from "../api/auth.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { ApiError } from "../api/client.js";
 import { PasswordInput } from "../components/PasswordInput.js";
+import { GoogleSignInButton } from "../components/GoogleSignInButton.js";
 
 export function LoginPage() {
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // A failed Google sign-in comes back as a redirect to /login?error=…, since the callback has
+  // no page of its own to report on.
+  const [error, setError] = useState<string | null>(searchParams.get("error"));
   const { setSession } = useAuth();
   const navigate = useNavigate();
 
@@ -38,7 +42,7 @@ export function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
           />
           <button type="submit">Log in</button>
-          {/* TODO: "Continue with Google" button linking to GET /api/auth/google */}
+          <GoogleSignInButton label="Continue with Google" />
           <p>
             <Link to="/forgot-password">Forgot password?</Link>
           </p>

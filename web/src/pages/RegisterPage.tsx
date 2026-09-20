@@ -4,6 +4,7 @@ import { register } from "../api/auth.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { ApiError } from "../api/client.js";
 import { USTA_RATINGS, type CreateUserAddressRequest } from "@tennisladder/shared";
+import { GoogleSignInButton } from "../components/GoogleSignInButton.js";
 import { SavedAddressForm } from "../components/SavedAddressForm.js";
 import { SavedAddressList } from "../components/SavedAddressList.js";
 
@@ -94,7 +95,7 @@ export function RegisterPage() {
             />
           </div>
           <button type="submit">Register</button>
-          {/* TODO: "Continue with Google" button linking to GET /api/auth/google */}
+          <GoogleSignInButton label="Sign up with Google" />
           <p>
             Already have an account? <Link to="/login">Log in</Link>
           </p>
