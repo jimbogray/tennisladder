@@ -5,6 +5,7 @@ import type {
   MatchDto,
   MatchScope,
   MatchStatusFilter,
+  MatchTravelPlanDto,
   ProposeMatchRequest,
   SubmitResultRequest,
 } from "@tennisladder/shared";
@@ -22,6 +23,11 @@ export function fetchMyMatches() {
 
 export function fetchMatch(id: string) {
   return apiFetch<MatchDetailDto>(`/matches/${id}`);
+}
+
+/** When you need to leave for a scheduled match. Private: worked out from your own origin. */
+export function fetchMatchTravelPlan(id: string) {
+  return apiFetch<MatchTravelPlanDto>(`/matches/${id}/travel-plan`);
 }
 
 export function proposeMatch(body: ProposeMatchRequest) {

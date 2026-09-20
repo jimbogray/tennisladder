@@ -915,6 +915,51 @@ tbody tr.row-me td:first-child {
   }
 }
 
+/* Departure time (scheduled match detail) */
+
+.travel-plan {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.travel-plan-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.travel-plan-drive {
+  font-family: var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--court-green-dark);
+}
+
+.travel-plan-departure {
+  margin: 0.35rem 0 0.15rem;
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--court-green-dark);
+}
+
+.travel-plan-note {
+  margin: 0 0 0.2rem;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
 /* Invites */
 
 .invite-actions {

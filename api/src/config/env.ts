@@ -51,6 +51,13 @@ export const env = {
    */
   logEmailLinks: process.env.LOG_EMAIL_LINKS ? process.env.LOG_EMAIL_LINKS === "true" : !isProduction,
 
+  /**
+   * OSRM routing server used for driving times (travelService). Defaults to the project's public
+   * demo server, which is fine for a club-sized ladder but asks for light usage — point this at
+   * your own instance if that stops being true.
+   */
+  routingBaseUrl: process.env.ROUTING_BASE_URL ?? "https://router.project-osrm.org",
+
   registrationCodeTtlHours: Number(process.env.REGISTRATION_CODE_TTL_HOURS ?? 48),
   passwordResetTtlMinutes: Number(process.env.PASSWORD_RESET_TTL_MINUTES ?? 60),
   matchReminderLeadMinutes: Number(process.env.MATCH_REMINDER_LEAD_MINUTES ?? 60),

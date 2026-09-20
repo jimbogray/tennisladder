@@ -4,6 +4,7 @@ import { LocationPicker } from "./LocationPicker.js";
 import { toDateTimeLocal } from "../lib/dateTime.js";
 import { MatchDateTimePicker } from "./MatchDateTimePicker.js";
 import { WeatherForecast } from "./WeatherForecast.js";
+import { DeparturePreview } from "./TravelPlan.js";
 import {
   defaultTravelOriginId,
   toTravelOriginAddressId,
@@ -67,6 +68,7 @@ export function ProposalForm({
         value={travelOriginId}
         onChange={setTravelOrigin}
       />
+      <DeparturePreview addressId={travelOriginId} locationId={locationId} dateTime={dateTime} />
       <textarea
         placeholder="Optional comment"
         value={comment}

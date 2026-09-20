@@ -4,6 +4,8 @@ import { Prisma, MatchStatus } from "@prisma/client";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import * as matchService from "../services/matchService.js";
+import { getMatchTravelPlan } from "../services/travelService.js";
+import { UpstreamUnavailableError } from "../services/upstream.js";
 import { toUserAddressDto } from "../services/addressService.js";
 
 // Joined onto matches so the UI can show player names. Deliberately narrow: selecting the whole
@@ -212,6 +214,26 @@ export const setTravelOrigin = asyncHandler(async (req: Request, res: Response) 
   const { addressId } = setTravelOriginSchema.parse(req.body);
   const origin = await matchService.setTravelOrigin(req.params.id, req.user!.id, addressId);
   res.json({ myTravelOrigin: origin ? toUserAddressDto(origin) : null });
+});
+
+/**
+ * When to leave for a scheduled match. Private to the caller: it's worked out from their own
+ * travel origin, which the other player never sees.
+ */
+export const getTravelPlan = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const plan = await getMatchTravelPlan(req.params.id, req.user!.id);
+    // A non-participant is told the same thing as someone asking about a match that isn't there.
+    if (!plan) {
+      res.status(404).json({ error: "Match not found" });
+      return;
+    }
+    res.json(plan);
+  } catch (err) {
+    if (!(err instanceof UpstreamUnavailableError)) throw err;
+    console.warn("Travel plan unavailable:", err.message);
+    res.status(502).json({ error: "Driving times are unavailable right now" });
+  }
 });
 
 export const declineMatch = asyncHandler(async (req: Request, res: Response) => {

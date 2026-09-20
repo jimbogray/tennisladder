@@ -4,14 +4,20 @@ import { PrismaClient } from "@prisma/client";
 // response. Reads that genuinely need it (i.e. login verification) opt back in per-query with
 // `omit: { passwordHash: false }`.
 //
-// Location's geocoding columns are likewise omitted: they're an internal cache for the weather
-// forecast (see weatherService.ts), not part of LocationDto.
+// The geocoding columns on Location and UserAddress are likewise omitted: they're an internal
+// cache for the weather forecast and driving times (see geocodingService.ts), not part of
+// LocationDto or UserAddressDto.
 export const prisma = new PrismaClient({
   omit: {
     user: {
       passwordHash: true,
     },
     location: {
+      latitude: true,
+      longitude: true,
+      geocodedAddress: true,
+    },
+    userAddress: {
       latitude: true,
       longitude: true,
       geocodedAddress: true,

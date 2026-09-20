@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchLocationForecast, fetchLocations } from "../api/locations.js";
-import { formatMatchDateTime } from "../lib/dateTime.js";
+import { formatMatchDateTime, isCompleteDateTimeLocal } from "../lib/dateTime.js";
 import {
   describeWeather,
   formatForecastDay,
@@ -9,8 +9,6 @@ import {
   formatWindSpeed,
   temperatureUnit,
 } from "../lib/weather.js";
-
-const COMPLETE_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
 const UNAVAILABLE_MESSAGES = {
   NO_ADDRESS: "No forecast: this location doesn't have an address yet.",
@@ -38,7 +36,7 @@ function RainChance({ percent }: { percent: number | null }) {
  * only a date has been chosen.
  */
 export function WeatherForecast({ locationId, dateTime }: { locationId: string; dateTime: string }) {
-  const at = COMPLETE_DATE_TIME.test(dateTime) ? new Date(dateTime).toISOString() : undefined;
+  const at = isCompleteDateTimeLocal(dateTime) ? new Date(dateTime).toISOString() : undefined;
   // Already in the cache: every screen that renders this has loaded the picker's locations.
   const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: fetchLocations });
   const isIndoor = locations?.find((loc) => loc.id === locationId)?.isIndoor ?? false;
