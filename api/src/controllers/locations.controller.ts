@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
@@ -34,8 +35,12 @@ export const getForecast = asyncHandler(async (req: Request, res: Response) => {
   }
 });
 
+const isDuplicateName = (err: unknown) =>
+  err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+
 const upsertLocationSchema = z.object({
-  name: z.string().min(1),
+  // Trimmed so " Riverside" can't sit beside "Riverside" as a separate court.
+  name: z.string().trim().min(1, "Give the location a name"),
   // Normalized to null so a cleared address field doesn't persist an empty string.
   address: z
     .string()
@@ -48,17 +53,45 @@ const upsertLocationSchema = z.object({
 
 export const createLocation = asyncHandler(async (req: Request, res: Response) => {
   const { name, address, isIndoor } = upsertLocationSchema.parse(req.body);
-  const location = await prisma.location.create({ data: { name, address, isIndoor } });
-  res.status(201).json(location);
+
+  // Deleting a location only archives it (its matches still point at it), so the name stays
+  // taken and a plain insert would collide. Adding the same name back is therefore a restore:
+  // the original row returns with whatever details were just entered, and its match history
+  // comes back with it.
+  const archived = await prisma.location.findFirst({
+    where: { name, NOT: { archivedAt: null } },
+  });
+  if (archived) {
+    const restored = await prisma.location.update({
+      where: { id: archived.id },
+      data: { address, isIndoor, archivedAt: null },
+    });
+    res.status(200).json(restored);
+    return;
+  }
+
+  try {
+    const location = await prisma.location.create({ data: { name, address, isIndoor } });
+    res.status(201).json(location);
+  } catch (err) {
+    // Another request took the name between the lookup above and this insert.
+    if (!isDuplicateName(err)) throw err;
+    res.status(409).json({ error: `There's already a location called "${name}"` });
+  }
 });
 
 export const updateLocation = asyncHandler(async (req: Request, res: Response) => {
   const { name, address, isIndoor } = upsertLocationSchema.parse(req.body);
-  const location = await prisma.location.update({
-    where: { id: req.params.id },
-    data: { name, address, isIndoor },
-  });
-  res.json(location);
+  try {
+    const location = await prisma.location.update({
+      where: { id: req.params.id },
+      data: { name, address, isIndoor },
+    });
+    res.json(location);
+  } catch (err) {
+    if (!isDuplicateName(err)) throw err;
+    res.status(409).json({ error: `There's already a location called "${name}"` });
+  }
 });
 
 export const deleteLocation = asyncHandler(async (req: Request, res: Response) => {
