@@ -235,7 +235,33 @@ gh workflow run deploy-production.yml
 
 Use a different admin password than staging.
 
-### 9. Production email
+### 9. Google sign-in (optional, per environment)
+
+In Google Cloud Console → **APIs & Services → Credentials → Create credentials → OAuth client ID →
+Web application**, add this environment's callback as an **Authorized redirect URI**:
+
+| | Authorized redirect URI |
+| --- | --- |
+| Local | `http://localhost:4000/api/auth/google/callback` |
+| Staging | `https://api.staging.playmore.tennis/api/auth/google/callback` |
+| Production | `https://api.playmore.tennis/api/auth/google/callback` |
+
+Authorized JavaScript origins can stay empty: this is a server-side code flow, so the browser never
+calls Google from the site's origin. Then re-run provisioning with the client's credentials:
+
+```bash
+GOOGLE_CLIENT_ID='<client id>' GOOGLE_CLIENT_SECRET='<client secret>' \
+  ./infra/provision-environment.sh staging
+```
+
+They're stored as Container App secrets and `GOOGLE_CALLBACK_URL` is derived from the API hostname,
+so it can't drift from the URI you registered. Locally, put the same three values in `api/.env`.
+
+Leave them unset and Google sign-in is simply off for that environment: the endpoints redirect back
+with a message, `GET /api/auth/providers` reports `google: false`, and the site hides the button.
+Use a separate OAuth client per environment, the way each already has its own JWT secrets.
+
+### 10. Production email
 
 Create Communication Services, connect `playmore.tennis` as a sending domain (it adds more TXT
 records in GoDaddy), then re-run provisioning with the connection string:

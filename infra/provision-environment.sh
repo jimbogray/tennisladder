@@ -15,6 +15,10 @@
 #   ACS_CONNECTION_STRING  Enables outbound email. Leave unset for staging so it can't email
 #                          real people.
 #   EMAIL_FROM_ADDRESS     Sender address; defaults to ladder@<domain>.
+#   GOOGLE_CLIENT_ID       Enables Google sign-in, both needed together. From an OAuth 2.0 Web
+#   GOOGLE_CLIENT_SECRET   client in Google Cloud Console, with this environment's callback
+#                          registered as an authorized redirect URI (printed at the end of a run).
+#                          Left unset, the API refuses the endpoints and the site hides the button.
 set -euo pipefail
 . "$(dirname "$0")/config.sh"
 
@@ -165,6 +169,14 @@ if ! has_secret database-url || [ -n "${PG_ADMIN_PASSWORD:-}" ]; then
   add_secret database-url "$(database_url "$PG_ADMIN_PASSWORD")"
 fi
 [ -n "${ACS_CONNECTION_STRING:-}" ] && add_secret acs-connection "$ACS_CONNECTION_STRING"
+# The client id isn't really a secret (it travels in the authorize URL), but it's stored as one so
+# the pair stays together — a re-run that passes neither variable then leaves both alone.
+if [ -n "${GOOGLE_CLIENT_ID:-}" ] || [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
+  [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] ||
+    die "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together"
+  add_secret google-client-id "$GOOGLE_CLIENT_ID"
+  add_secret google-client-secret "$GOOGLE_CLIENT_SECRET"
+fi
 
 if [ -n "$SECRET_NAMES" ]; then
   info "Setting secrets:${SECRET_NAMES}"
@@ -178,6 +190,8 @@ else
   info "All secrets already set"
 fi
 
+GOOGLE_CALLBACK_URL_FOR_ENV="https://${API_HOST}/api/auth/google/callback"
+
 ENV_VARS=(
   "NODE_ENV=production"
   "PORT=4000"
@@ -189,6 +203,13 @@ ENV_VARS=(
 if has_secret acs-connection || [ -n "${ACS_CONNECTION_STRING:-}" ]; then
   ENV_VARS+=("AZURE_COMMUNICATION_CONNECTION_STRING=secretref:acs-connection")
   ENV_VARS+=("EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-ladder@${DOMAIN}}")
+fi
+# Derived rather than configured: Google compares the callback character for character against the
+# registered redirect URI, so building it from API_HOST removes a way to get it subtly wrong.
+if has_secret google-client-id || [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
+  ENV_VARS+=("GOOGLE_CLIENT_ID=secretref:google-client-id")
+  ENV_VARS+=("GOOGLE_CLIENT_SECRET=secretref:google-client-secret")
+  ENV_VARS+=("GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL_FOR_ENV}")
 fi
 # Staging sends no email, so without its links in the logs nobody there could reset a password or
 # follow an invite. Production never gets this; the API also ignores it once email is configured.
@@ -258,6 +279,16 @@ RG_ID="$(az group show --name "$RG" --query id --output tsv 2>/dev/null || true)
 ensure_role "$SP_ID" Contributor "${RG_ID:-$PENDING}" "$RG"
 if [ "$ENVIRONMENT" = "staging" ]; then
   ensure_role "$SP_ID" Contributor "$ACR_ID" "$ACR_NAME (image builds)"
+fi
+
+echo
+if has_secret google-client-id || [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
+  info "Google sign-in is on. Authorized redirect URI: ${GOOGLE_CALLBACK_URL_FOR_ENV}"
+else
+  info "Google sign-in is off (no GOOGLE_CLIENT_ID). To turn it on, register"
+  echo "    ${GOOGLE_CALLBACK_URL_FOR_ENV}"
+  echo "    as a redirect URI on an OAuth 2.0 Web client, then re-run with"
+  echo "    GOOGLE_CLIENT_ID='...' GOOGLE_CLIENT_SECRET='...' $0 ${ENVIRONMENT}"
 fi
 
 echo
