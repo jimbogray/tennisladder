@@ -37,7 +37,9 @@ export const env = {
 
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-  googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL ?? "",
+  // Must match a redirect URI registered on the OAuth client in Google Cloud Console.
+  googleCallbackUrl:
+    process.env.GOOGLE_CALLBACK_URL ?? "http://localhost:4000/api/auth/google/callback",
 
   azureCommunicationConnectionString: process.env.AZURE_COMMUNICATION_CONNECTION_STRING ?? "",
   emailFromAddress: process.env.EMAIL_FROM_ADDRESS ?? "ladder@example.com",

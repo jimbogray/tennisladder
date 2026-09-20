@@ -33,6 +33,17 @@ export interface UpdateProfileRequest {
   ustaRating?: UstaRating | null;
 }
 
+// POST /api/auth/complete-profile — what a Google-first signup still owes before it's on the team.
+export interface CompleteProfileRequest {
+  registrationCode: string;
+  ustaRating?: UstaRating | null;
+}
+
+// GET /api/auth/providers — which sign-in methods this deployment has configured.
+export interface AuthProvidersDto {
+  google: boolean;
+}
+
 // A place the user travels to matches from. Only ever returned to its owner.
 export interface UserAddressDto {
   id: string;

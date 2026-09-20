@@ -76,7 +76,7 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 
 ## API Endpoints (grouped)
 
-- **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/google` (+`/callback`), `POST /api/auth/complete-profile`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, `GET /api/auth/verify-email/:token`.
+- **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/providers` (which sign-in methods are configured), `GET /api/auth/google` (+`/callback`), `POST /api/auth/complete-profile`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, `GET /api/auth/verify-email/:token`.
 - **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name only), `GET`/`POST /api/players/me/addresses` and `DELETE /api/players/me/addresses/:id` (own saved addresses only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
 - **Registration codes**: `POST /api/admin/registration-codes`, `GET /api/admin/registration-codes` (Admin).
 - **Team**: `GET /api/admin/users` (every registered user who hasn't been removed, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id` (Admin). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
@@ -93,6 +93,37 @@ The match proposal forms show the forecast for the chosen location: a 7-day outl
 - **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for weather.
 - **Forecast responses are cached in memory for 30 minutes per location**, which relies on the same single-replica assumption as the scheduled jobs (a second replica would only mean more upstream calls, not incorrect data).
 - Units are always metric in the API; the SPA converts to °F/mph for US-region locales.
+
+## Google Sign-In
+
+Offered on the login and register pages, alongside the email/password form. Hand-rolled against
+Google's OAuth 2.0 endpoints rather than through a provider library, for the same reason the rest
+of auth is hand-rolled — see the risk flag above.
+
+- **Flow.** `GET /api/auth/google` redirects to Google's consent screen with a random `state`,
+  which is also set as a short-lived httpOnly cookie on the API's own origin; the callback refuses
+  anything whose `state` doesn't match, which is what stops a third party's authorization code
+  being fed to us. No PKCE: this is a confidential client, so the code is useless without the
+  secret, which never leaves the server.
+- **Profile comes from the userinfo endpoint**, not from decoding the `id_token`, so there is no
+  unverified JWT handling anywhere — the answer arrives straight from Google over TLS.
+- **Unverified Google emails are rejected**, or signing up to Google with a club member's address
+  would be enough to claim their account.
+- **The callback ends in a redirect, not a response body.** There is no SPA code waiting on it at
+  that point, so the session is handed over as the refresh cookie alone and the SPA mints an
+  access token from it on load — the same path it already takes after a full page reload.
+- **Merging is by email** (TL-7): an existing account with the same address adopts the Google id
+  and keeps its password, so either way in works afterwards.
+- **A Google-first signup still needs an invite code.** It gets a `User` row with no
+  `registrationCodeId` and `profileCompletedAt` null, and is sent to `/complete-profile` to redeem
+  one, which is what decides its account type. Until then `profileComplete: false` rides in the
+  access token and `requireAuth` answers 403 `PROFILE_INCOMPLETE` everywhere except session,
+  logout and complete-profile; the ladder, challenge picker and team list exclude it as well. The
+  claim lives in the token so the guard costs no database round trip, and a missing claim reads as
+  complete, so tokens minted before the feature shipped keep working.
+- **Configuration is optional.** Without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` the endpoints
+  redirect back with a message and `GET /api/auth/providers` reports `google: false`, which is how
+  the SPA knows to hide the button. Local dev and staging run this way.
 
 ## Saved Addresses
 

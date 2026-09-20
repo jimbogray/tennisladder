@@ -1,5 +1,27 @@
-import type { CreateUserAddressRequest, SessionUserDto } from "@tennisladder/shared";
-import { apiFetch } from "./client.js";
+import type {
+  AuthProvidersDto,
+  CompleteProfileRequest,
+  CreateUserAddressRequest,
+  SessionUserDto,
+} from "@tennisladder/shared";
+import { API_BASE_URL, apiFetch } from "./client.js";
+
+/**
+ * Google sign-in is a full-page navigation, not a fetch: the browser has to visit Google and be
+ * redirected back to the API, which hands the session over as the refresh cookie.
+ */
+export const googleSignInUrl = `${API_BASE_URL}/auth/google`;
+
+export function fetchAuthProviders() {
+  return apiFetch<AuthProvidersDto>("/auth/providers");
+}
+
+export function completeProfile(body: CompleteProfileRequest) {
+  return apiFetch<{ user: SessionUserDto; accessToken: string }>("/auth/complete-profile", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
 
 export interface LoginRequest {
   email: string;

@@ -7,6 +7,11 @@ export interface AccessTokenPayload {
   sub: string;
   role: UserRole;
   participatesInLadder: boolean;
+  /**
+   * False for a Google-first signup that hasn't redeemed an invite code yet. Carried in the token
+   * so the guard costs nothing; a completed profile mints a replacement token straight away.
+   */
+  profileComplete: boolean;
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {

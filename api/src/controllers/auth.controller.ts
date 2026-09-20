@@ -4,6 +4,14 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { hashPassword, verifyPassword } from "../auth/passwordUtils.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../auth/authConfig.js";
+import {
+  buildAuthorizationUrl,
+  exchangeCodeForProfile,
+  generateOAuthState,
+  GoogleAuthError,
+  isGoogleAuthConfigured,
+} from "../auth/googleOAuth.js";
+import { USTA_RATINGS } from "@tennisladder/shared";
 import { toSessionUserDto, type SessionUser } from "../auth/sessionUser.js";
 import { generateOpaqueToken, hashToken } from "../services/tokenService.js";
 import {
@@ -23,12 +31,16 @@ const refreshCookieOptions = {
   path: "/api/auth",
 };
 
-async function issueSession(res: Response, user: SessionUser) {
-  const accessToken = signAccessToken({
+function accessTokenFor(user: SessionUser) {
+  return signAccessToken({
     sub: user.id,
     role: user.role,
     participatesInLadder: user.participatesInLadder,
+    profileComplete: user.profileCompletedAt !== null,
   });
+}
+
+async function issueRefreshCookie(res: Response, user: SessionUser) {
   const refreshToken = signRefreshToken(user.id);
 
   await prisma.refreshToken.create({
@@ -43,8 +55,11 @@ async function issueSession(res: Response, user: SessionUser) {
     ...refreshCookieOptions,
     maxAge: env.jwtRefreshTtlDays * 24 * 60 * 60 * 1000,
   });
+}
 
-  res.json({ user: toSessionUserDto(user), accessToken });
+async function issueSession(res: Response, user: SessionUser) {
+  await issueRefreshCookie(res, user);
+  res.json({ user: toSessionUserDto(user), accessToken: accessTokenFor(user) });
 }
 
 // Shared by registration and password reset so the two can't drift apart.
@@ -95,6 +110,9 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
       role,
       participatesInLadder,
       registrationCodeId: code.id,
+      // Redeeming a code is what "finished signing up" means; only Google-first accounts arrive
+      // without one and have to come back through POST /auth/complete-profile.
+      profileCompletedAt: new Date(),
       addresses: data.addresses?.length ? { create: data.addresses } : undefined,
     },
   });
@@ -127,20 +145,174 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   await issueSession(res, user);
 });
 
+/** Whether the SPA should offer the Google button at all; it's off wherever credentials are absent. */
+export const authProviders = (_req: Request, res: Response) => {
+  res.json({ google: isGoogleAuthConfigured() });
+};
+
+// Only has to outlive the round trip to Google's consent screen.
+const OAUTH_STATE_COOKIE = "googleOAuthState";
+const oauthStateCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/api/auth",
+};
+
+/** Sends the browser back to the SPA's login page with a message to show. */
+function failSignIn(res: Response, reason: string): void {
+  res.clearCookie(OAUTH_STATE_COOKIE, oauthStateCookieOptions);
+  res.redirect(`${env.webAppUrl}/login?error=${encodeURIComponent(reason)}`);
+}
+
 export const googleStart = asyncHandler(async (_req: Request, res: Response) => {
-  // TODO: redirect to Google's OAuth consent screen.
-  res.status(501).json({ error: "Not implemented" });
+  if (!isGoogleAuthConfigured()) {
+    failSignIn(res, "Google sign-in isn't set up for this site");
+    return;
+  }
+
+  const state = generateOAuthState();
+  res.cookie(OAUTH_STATE_COOKIE, state, { ...oauthStateCookieOptions, maxAge: 10 * 60 * 1000 });
+  res.redirect(buildAuthorizationUrl(state));
 });
 
-export const googleCallback = asyncHandler(async (_req: Request, res: Response) => {
-  // TODO: exchange code, upsert User by googleId/email, redirect to /complete-profile if
-  // profileCompletedAt is null, else issue tokens and redirect to the SPA.
-  res.status(501).json({ error: "Not implemented" });
+/**
+ * Where Google sends the browser back. Ends in a redirect either way — there's no SPA code
+ * listening for a response body at this point, so the session is handed over as the refresh
+ * cookie and the SPA mints an access token from it on load, exactly as it does after a reload.
+ */
+export const googleCallback = asyncHandler(async (req: Request, res: Response) => {
+  if (!isGoogleAuthConfigured()) {
+    failSignIn(res, "Google sign-in isn't set up for this site");
+    return;
+  }
+
+  const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
+  if (error) {
+    // The usual one is access_denied: the player changed their mind at the consent screen.
+    failSignIn(res, error === "access_denied" ? "Google sign-in was cancelled" : "Google sign-in failed");
+    return;
+  }
+
+  const expectedState = req.cookies?.[OAUTH_STATE_COOKIE] as string | undefined;
+  if (!code || !state || !expectedState || state !== expectedState) {
+    failSignIn(res, "Google sign-in couldn't be verified. Please try again.");
+    return;
+  }
+  res.clearCookie(OAUTH_STATE_COOKIE, oauthStateCookieOptions);
+
+  let profile;
+  try {
+    profile = await exchangeCodeForProfile(code);
+  } catch (err) {
+    if (!(err instanceof GoogleAuthError)) throw err;
+    console.warn("[googleAuth] exchange failed:", err.message);
+    failSignIn(res, "Google sign-in failed. Please try again.");
+    return;
+  }
+
+  // An unverified address would let someone claim a club member's account by signing up to
+  // Google with their email.
+  if (!profile.emailVerified) {
+    failSignIn(res, "Your Google account's email address isn't verified");
+    return;
+  }
+
+  const user = await linkOrCreateGoogleUser(profile);
+  if (!user) {
+    failSignIn(res, "This account has been removed from the team");
+    return;
+  }
+
+  await issueRefreshCookie(res, user);
+  // A brand-new Google account still owes us an invite code before it's on the team.
+  res.redirect(`${env.webAppUrl}${user.profileCompletedAt ? "/ladder" : "/complete-profile"}`);
 });
 
-export const completeProfile = asyncHandler(async (_req: Request, res: Response) => {
-  // TODO: capture ustaRating + registrationCode for a Google-first signup, set profileCompletedAt.
-  res.status(501).json({ error: "Not implemented" });
+/**
+ * Resolves a Google identity to an account, per TL-7's merge rule: an existing account with the
+ * same email adopts the Google id, so a player who registered with a password can use either way
+ * in. Returns null when the account has been removed from the team.
+ */
+async function linkOrCreateGoogleUser(profile: {
+  googleId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}): Promise<SessionUser | null> {
+  const byGoogleId = await prisma.user.findUnique({ where: { googleId: profile.googleId } });
+  if (byGoogleId) return byGoogleId.removedAt ? null : byGoogleId;
+
+  const byEmail = await prisma.user.findUnique({ where: { email: profile.email } });
+  if (byEmail) {
+    if (byEmail.removedAt) return null;
+    return prisma.user.update({
+      where: { id: byEmail.id },
+      data: {
+        googleId: profile.googleId,
+        // Google vouched for the address, which is the same thing our own verification email asks.
+        emailVerifiedAt: byEmail.emailVerifiedAt ?? new Date(),
+      },
+    });
+  }
+
+  // No invite code yet, so no role beyond the default and no place on the ladder until
+  // POST /auth/complete-profile runs. profileCompletedAt stays null, which the token carries.
+  return prisma.user.create({
+    data: {
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      email: profile.email,
+      googleId: profile.googleId,
+      emailVerifiedAt: new Date(),
+    },
+  });
+}
+
+const completeProfileSchema = z.object({
+  registrationCode: z.string().length(4, "Registration code must be 4 digits"),
+  ustaRating: z.union([z.enum(USTA_RATINGS), z.literal(""), z.null()]).optional(),
+});
+
+/**
+ * Finishes a Google-first signup: redeems the invite code, which decides the account type, and
+ * records the rating. Answers with a fresh access token because the code may have just turned
+ * the account into an admin, and the old token says otherwise.
+ */
+export const completeProfile = asyncHandler(async (req: Request, res: Response) => {
+  const { registrationCode, ustaRating } = completeProfileSchema.parse(req.body);
+
+  const existing = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id } });
+  if (existing.profileCompletedAt) {
+    res.status(409).json({ error: "Your account is already set up" });
+    return;
+  }
+
+  let code;
+  try {
+    code = await redeemRegistrationCode(registrationCode);
+  } catch (err) {
+    if (err instanceof RegistrationCodeError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+
+  const { role, participatesInLadder } = accountFieldsFor(code.accountType);
+  const user = await prisma.user.update({
+    where: { id: existing.id },
+    data: {
+      role,
+      participatesInLadder,
+      // A rating only means something for someone on the ladder — same rule as registration.
+      ustaRating: participatesInLadder ? (ustaRating || null) : null,
+      registrationCodeId: code.id,
+      profileCompletedAt: new Date(),
+    },
+  });
+
+  res.json({ user: toSessionUserDto(user), accessToken: accessTokenFor(user) });
 });
 
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
@@ -178,12 +350,7 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
   // Not rotated: the refresh token stays valid until its own expiry so that concurrent
   // refresh calls (e.g. React StrictMode's double effect invocation in dev) don't race each
   // other into invalidating a token the other call still needs.
-  const accessToken = signAccessToken({
-    sub: user.id,
-    role: user.role,
-    participatesInLadder: user.participatesInLadder,
-  });
-  res.json({ user: toSessionUserDto(user), accessToken });
+  res.json({ user: toSessionUserDto(user), accessToken: accessTokenFor(user) });
 });
 
 export const logout = asyncHandler(async (req: Request, res: Response) => {

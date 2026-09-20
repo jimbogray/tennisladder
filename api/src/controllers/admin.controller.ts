@@ -118,7 +118,8 @@ function toTeamMemberDto(user: {
 
 export const listTeamMembers = asyncHandler(async (_req: Request, res: Response) => {
   const users = await prisma.user.findMany({
-    where: { removedAt: null },
+    // A Google signup that hasn't redeemed an invite code has an account but isn't on the team.
+    where: { removedAt: null, profileCompletedAt: { not: null } },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     select: teamMemberSelect,
   });
