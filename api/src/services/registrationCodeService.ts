@@ -3,12 +3,12 @@ import type { AccountType, UserRole } from "@prisma/client";
 import { prisma } from "../config/prisma.js";
 import { env } from "../config/env.js";
 
-function generateFourDigitCode(): string {
-  return String(randomInt(0, 10000)).padStart(4, "0");
+function generateSixDigitCode(): string {
+  return String(randomInt(0, 1000000)).padStart(6, "0");
 }
 
 /**
- * Generates a unique, active, 4-digit registration code. Active-code uniqueness is enforced at
+ * Generates a unique, active, 6-digit registration code. Active-code uniqueness is enforced at
  * the DB level by a partial unique index (WHERE used_at IS NULL) — see prisma/MIGRATION_NOTES.md —
  * so on the rare collision this simply retries.
  */
@@ -23,7 +23,7 @@ export async function generateRegistrationCode(
     try {
       return await prisma.registrationCode.create({
         data: {
-          code: generateFourDigitCode(),
+          code: generateSixDigitCode(),
           createdByAdminId,
           intendedForNote,
           invitedEmail,
@@ -71,9 +71,16 @@ export class RegistrationCodeError extends Error {}
 
 /**
  * Atomically redeems an active registration code: looks it up by value (usedAt IS NULL), verifies
- * it hasn't expired, marks it used, and returns it. Throws {@link RegistrationCodeError} otherwise.
+ * it hasn't expired, checks it against the email redeeming it, marks it used, and returns it.
+ * Throws {@link RegistrationCodeError} otherwise.
+ *
+ * A code created by emailing an invite carries the address it was sent to, and only that address
+ * may redeem it — an emailed invite is for one person, not a code anyone forwarded can use. Codes
+ * generated for manual handout have no invitedEmail and stay redeemable by anyone holding them.
+ * The check runs inside the transaction so a mismatch leaves the code unused and still redeemable
+ * by its intended recipient.
  */
-export async function redeemRegistrationCode(code: string) {
+export async function redeemRegistrationCode(code: string, redeemingEmail: string) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.registrationCode.findFirst({
       where: { code, usedAt: null },
@@ -83,6 +90,15 @@ export async function redeemRegistrationCode(code: string) {
     }
     if (existing.expiresAt <= new Date()) {
       throw new RegistrationCodeError("Registration code has expired");
+    }
+    // invitedEmail is stored lowercased when the invite is issued; normalize both sides anyway.
+    if (
+      existing.invitedEmail &&
+      existing.invitedEmail.toLowerCase() !== redeemingEmail.trim().toLowerCase()
+    ) {
+      throw new RegistrationCodeError(
+        "This invite was sent to a different email address. Sign up with the address your club admin invited, or ask them for a new code.",
+      );
     }
     return tx.registrationCode.update({
       where: { id: existing.id },

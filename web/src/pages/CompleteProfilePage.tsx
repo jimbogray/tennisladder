@@ -46,7 +46,7 @@ export function CompleteProfilePage() {
           <h1>Finish signing up</h1>
           <p>
             {user ? `You're signed in as ${user.email}. ` : ""}
-            Your club admin gives out a 4-digit code that adds you to the team.
+            Your club admin gives out a 6-digit code that adds you to the team.
           </p>
           {error && <p role="alert">{error}</p>}
 
@@ -54,7 +54,7 @@ export function CompleteProfilePage() {
           <input
             id="complete-registration-code"
             inputMode="numeric"
-            maxLength={4}
+            maxLength={6}
             autoFocus
             value={registrationCode}
             onChange={(e) => setRegistrationCode(e.target.value.replace(/\D/g, ""))}

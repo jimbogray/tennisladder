@@ -72,12 +72,12 @@ export function RegisterPage() {
           <input
             placeholder="Registration code"
             inputMode="numeric"
-            maxLength={4}
+            maxLength={6}
             aria-describedby="registration-code-hint"
             value={form.registrationCode}
             onChange={(e) => set("registrationCode", e.target.value.replace(/\D/g, ""))}
           />
-          <small id="registration-code-hint">4-digit code from your club admin.</small>
+          <small id="registration-code-hint">6-digit code from your club admin.</small>
           <div className="register-addresses">
             <h2>Where do you travel from?</h2>
             <small>
