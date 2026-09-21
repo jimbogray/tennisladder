@@ -279,6 +279,20 @@ export const adminPendingMatches = asyncHandler(async (_req: Request, res: Respo
   res.json(matches.map(withPublicPlayers));
 });
 
+/**
+ * Calls off a match on the players' behalf. Admin-only, and deliberately not gated on ladder
+ * participation — a coach-admin who never plays still needs to clear out a stuck match.
+ */
+export const adminCancelMatch = asyncHandler(async (req: Request, res: Response) => {
+  const { comment } = cancelSchema.parse(req.body ?? {});
+  const match = await matchService.adminCancelMatch(
+    req.params.id,
+    req.user!.id,
+    comment?.trim() || undefined,
+  );
+  res.json(match);
+});
+
 const overrideSchema = z.object({ winnerId: z.string().min(1), loserId: z.string().min(1) });
 
 export const adminOverrideResult = asyncHandler(async (req: Request, res: Response) => {

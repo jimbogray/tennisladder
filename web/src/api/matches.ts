@@ -94,6 +94,14 @@ export function fetchAdminPendingMatches() {
   return apiFetch<MatchDto[]>("/admin/matches/pending");
 }
 
+/** Admin calls off someone else's match. Allowed while it's being negotiated or once scheduled. */
+export function adminCancelMatch(id: string, comment?: string) {
+  return apiFetch<MatchDto>(`/admin/matches/${id}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
+}
+
 export function adminOverrideResult(id: string, winnerId: string, loserId: string) {
   return apiFetch<MatchDto>(`/admin/matches/${id}/override-result`, {
     method: "POST",

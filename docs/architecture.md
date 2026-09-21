@@ -58,6 +58,7 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 | `RESULT_PENDING` | Second player submits matching result | `COMPLETED` (points applied transactionally, tokens voided) |
 | `RESULT_PENDING` | Second player submits conflicting result | `RESULT_DISPUTED` (surfaces on admin dashboard) |
 | any pre-`COMPLETED` state | Admin overrides | `COMPLETED` (`isAdminOverride=true`, bypasses confirmation) |
+| `NEGOTIATING` or `SCHEDULED` | Admin cancels | `CANCELLED` (terminal, `ADMIN_CANCELLED` event carries the admin and the optional reason) |
 
 **Points math**, applied once at transition into `COMPLETED`, inside a transaction with rows locked in a consistent order (by `id`) to avoid deadlocks:
 ```
@@ -83,7 +84,7 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
 - **Weather**: `GET /api/locations/:id/forecast[?at=<ISO>]` (Player/Admin) — a 7-day outlook, or with `at` the hours around a match time. Shown on the propose/amend/counter forms.
 - **Travel**: `GET /api/matches/:id/travel-plan` (the caller's own journey only) — when to leave for a scheduled match, shown on the match page. `GET /api/travel/departure?addressId=&locationId=&at=` answers the same question for a match that doesn't exist yet, from one of the caller's own saved addresses — shown on the propose/amend/counter forms.
-- **Matches**: `GET /api/matches?filter=all|completed|pending`, `POST /api/matches` (propose — server rejects if either challenger or opponent has `participatesInLadder=false`), `GET /api/matches/:id`, `GET /api/matches/mine`, `POST /api/matches/:id/{counter,accept,decline}`, `PUT /api/matches/:id/travel-origin` (the caller's own, upcoming matches only), `GET /api/matches/:id/travel-plan` (the caller's own departure time), `GET /api/admin/matches/pending` (Admin).
+- **Matches**: `GET /api/matches?filter=all|completed|pending`, `POST /api/matches` (propose — server rejects if either challenger or opponent has `participatesInLadder=false`), `GET /api/matches/:id`, `GET /api/matches/mine`, `POST /api/matches/:id/{counter,accept,decline}`, `PUT /api/matches/:id/travel-origin` (the caller's own, upcoming matches only), `GET /api/matches/:id/travel-plan` (the caller's own departure time), `GET /api/admin/matches/pending` (Admin), `POST /api/admin/matches/:id/cancel` (Admin — calls off a `NEGOTIATING` or `SCHEDULED` match on the players' behalf; soft, like every other removal here, so the row and its event thread survive as `CANCELLED`). Not gated on ladder participation, so a coach-admin can use it.
 - **Results**: `POST /api/matches/:id/result` (web), `GET`/`POST /api/results/token/:token` (public — token is the credential), `POST /api/admin/matches/:id/override-result` (Admin).
 
 ## Weather Forecast

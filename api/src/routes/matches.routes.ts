@@ -28,4 +28,5 @@ matchesRouter.post("/:id/result/reject", requireAuth, requireLadderParticipant, 
 
 export const adminMatchesRouter = Router();
 adminMatchesRouter.get("/pending", requireAuth, requireAdmin, matches.adminPendingMatches);
+adminMatchesRouter.post("/:id/cancel", requireAuth, requireAdmin, matches.adminCancelMatch);
 adminMatchesRouter.post("/:id/override-result", requireAuth, requireAdmin, matches.adminOverrideResult);
