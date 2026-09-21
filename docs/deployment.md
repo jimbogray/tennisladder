@@ -90,8 +90,21 @@ with its own managed identity.
   and a text's phone-number confirmation code — so those flows can still be completed:
   `az containerapp logs show -g tennisladder-staging-rg -n tennisladder-staging-api --follow`.
   (The variable is named for email because it predates SMS.) Those links and codes are live
-  credentials, which is why production never sets the flag. Never copy production data into staging
-  while messaging is enabled there: reminder jobs would message real players.
+  credentials, which is why production never sets the flag.
+
+  To exercise the notification emails themselves rather than read them out of a log, give staging
+  Communication Services and set `EMAIL_REDIRECT_TO` to the tester's own address — the commands are
+  under [Staging email](#11-staging-email-optional-redirected-to-a-tester). Every email then
+  goes there whoever it was addressed to, with the intended recipient at the front of the subject
+  (`[to: sam@club.example] Match confirmed vs Alex`), so one inbox can hold both sides of a
+  negotiation and still be read. Bodies are untouched: the links are built from `WEB_APP_URL`, so
+  they open the staging site and settle staging's own tokens, exactly as they would in production.
+  This is also what makes copying production data into staging survivable — without the redirect,
+  the reminder jobs would mail real players, so never enable messaging there without it.
+  `provision-environment.sh` refuses `EMAIL_REDIRECT_TO` on production; the app can't enforce that
+  itself, since staging runs with `NODE_ENV=production` too. To stop redirecting, unset it on the
+  Container App (`az containerapp update ... --remove-env-vars EMAIL_REDIRECT_TO`) — re-running the
+  provisioning script without it leaves an already-set value in place.
 - **Search engines** — the staging deploy publishes a `robots.txt` that disallows indexing.
 
 ## Why the domain is load-bearing
@@ -304,6 +317,64 @@ phone-number section can't complete. Add it to the same command once you have a 
 ACS_CONNECTION_STRING='<connection string>' EMAIL_FROM_ADDRESS='ladder@playmore.tennis' \
   SMS_FROM_NUMBER='+15551234567' ./infra/provision-environment.sh production
 ```
+
+### 11. Staging email (optional, redirected to a tester)
+
+Staging ships with no Communication Services, so it sends nothing. Giving it email is only worth
+doing alongside `EMAIL_REDIRECT_TO` — without that, staging mails real club members.
+
+Give staging its **own** Communication Services resource rather than sharing production's: a
+separate sending reputation and quota, and nothing on staging can spend production's. Use an
+Azure-managed domain, which needs no DNS records and exists to be thrown away:
+
+```bash
+az extension add --name communication --only-show-errors   # once per machine
+
+az communication email create --name tennisladder-staging-email \
+  --resource-group tennisladder-staging-rg --location global --data-location UnitedStates
+
+az communication email domain create --domain-name AzureManagedDomain \
+  --email-service-name tennisladder-staging-email --resource-group tennisladder-staging-rg \
+  --location global --domain-management AzureManaged
+
+DOMAIN_ID="$(az communication email domain show --domain-name AzureManagedDomain \
+  --email-service-name tennisladder-staging-email --resource-group tennisladder-staging-rg \
+  --query id --output tsv)"
+
+az communication create --name tennisladder-staging-comms \
+  --resource-group tennisladder-staging-rg --location global --data-location UnitedStates \
+  --linked-domains "$DOMAIN_ID"
+```
+
+The managed domain's sender address is `DoNotReply@<guid>.azurecomm.net` — read the `<guid>` part
+from the domain's `fromSenderDomain`, and take the connection string from the Communication
+Services resource:
+
+```bash
+az communication email domain show --domain-name AzureManagedDomain \
+  --email-service-name tennisladder-staging-email --resource-group tennisladder-staging-rg \
+  --query fromSenderDomain --output tsv
+
+az communication list-key --name tennisladder-staging-comms \
+  --resource-group tennisladder-staging-rg --query primaryConnectionString --output tsv
+```
+
+Then re-run provisioning with all three together:
+
+```bash
+ACS_CONNECTION_STRING='<connection string>' \
+  EMAIL_FROM_ADDRESS='DoNotReply@<guid>.azurecomm.net' \
+  EMAIL_REDIRECT_TO='you@example.com' ./infra/provision-environment.sh staging
+```
+
+Writing the connection-string secret rolls a new revision, so it takes effect on that run — see
+[Rotating a secret](#rotating-a-secret) for why that matters. Deploys only swap the image, so both
+the secret and the redirect survive them.
+
+Expect the first few to land in spam: an `azurecomm.net` sender has no reputation, and no SPF or
+DKIM record of yours vouches for it. That's the trade for not putting staging traffic on the club's
+own domain. Managed domains are also rate-limited well below a real one, which a club-sized ladder
+won't notice.
 
 ---
 

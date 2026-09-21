@@ -88,6 +88,10 @@ suite above, anything else still needs checking by hand.
   to `web/.env` (sets `VITE_API_BASE_URL`) or the SPA's API calls silently target `undefined` and
   every request 404s. Vite only reads `.env` at server start, so restart `npm run dev:web` after
   creating/editing it.
+- `EMAIL_REDIRECT_TO` (optional, `api/.env`) sends every outbound email to one address instead of
+  the player it was addressed to, with that player named at the front of the subject. It's how
+  notifications get tested in dev and staging without mailing real members; the body, and so every
+  link in it, is left exactly as rendered. Production must leave it blank.
 - `VITE_GOOGLE_MAPS_API_KEY` (optional) drives Places autocomplete + embedded maps on the Locations
   page. Left blank, the address field degrades to a plain text input and maps are hidden, so the
   page stays fully usable — a blank key is a supported state, not a broken one.
