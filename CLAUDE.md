@@ -104,7 +104,8 @@ suite above, anything else still needs checking by hand.
 ### Monorepo layout
 
 ```
-/packages/shared   @tennisladder/shared — hand-maintained enums + DTO types shared by api and web.
+/packages/shared   @tennisladder/shared — hand-maintained enums + DTO types shared by api and web,
+                   plus the handful of pure helpers both sides must agree on (calendar.ts).
                    Must be built (npm run build --workspace=@tennisladder/shared) before api/web
                    typecheck, since they import it as a real package, not a path alias. Root
                    postinstall does this automatically; after pulling schema/enum changes, rebuild

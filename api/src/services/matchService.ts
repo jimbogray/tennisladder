@@ -1,4 +1,5 @@
 import { Prisma, MatchEventType, MatchStatus, ResultOutcome } from "@prisma/client";
+import { googleCalendarUrlForMatch } from "@tennisladder/shared";
 import { prisma } from "../config/prisma.js";
 import { env } from "../config/env.js";
 import { generateOpaqueToken, hashToken } from "./tokenService.js";
@@ -301,6 +302,16 @@ async function sendMatchConfirmedEmails(
     ]);
 
     const when = formatMatchDateTimeForEmail(scheduledDateTime);
+    // One event for both emails: the players are being invited to the same match, and the link
+    // carries a UTC instant, so each calendar shows it in its own owner's zone.
+    const calendarUrl = googleCalendarUrlForMatch({
+      challengerName: `${challenger.firstName} ${challenger.lastName}`,
+      opponentName: `${opponent.firstName} ${opponent.lastName}`,
+      scheduledDateTime,
+      locationName: location.name,
+      locationAddress: location.address,
+      matchUrl: `${env.webAppUrl}/matches/${match.id}`,
+    });
     const linkFor = (userId: string, outcome: ResultOutcome) => {
       const issued = tokens.find((token) => token.userId === userId && token.outcome === outcome);
       if (!issued) throw new Error(`no ${outcome} result token was issued for user ${userId}`);
@@ -316,6 +327,7 @@ async function sendMatchConfirmedEmails(
         opponentFirstName: other.firstName,
         scheduledDateTime: when,
         locationName: location.name,
+        calendarUrl,
         wonResultUrl: linkFor(recipient.id, ResultOutcome.WON),
         lostResultUrl: linkFor(recipient.id, ResultOutcome.LOST),
       });

@@ -5,6 +5,7 @@ export interface MatchConfirmedTemplateInput {
   opponentFirstName: string;
   scheduledDateTime: string;
   locationName: string;
+  calendarUrl: string;
   wonResultUrl: string;
   lostResultUrl: string;
 }
@@ -17,6 +18,9 @@ export function renderMatchConfirmedEmail(input: MatchConfirmedTemplateInput): {
       <p>
         You're playing ${escapeHtml(input.opponentFirstName)} on
         ${escapeHtml(input.scheduledDateTime)} at ${escapeHtml(input.locationName)}.
+      </p>
+      <p>
+        <a href="${escapeHtml(input.calendarUrl)}">Add this match to your Google Calendar</a>
       </p>
       <p>Once you've played, tell us how it went:</p>
       <p>
