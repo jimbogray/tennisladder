@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { register } from "../api/auth.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { ApiError } from "../api/client.js";
-import { USTA_RATINGS, type CreateUserAddressRequest } from "@tennisladder/shared";
+import { USTA_RATINGS, type AvatarId, type CreateUserAddressRequest } from "@tennisladder/shared";
+import { AvatarPicker } from "../components/AvatarPicker.js";
 import { GoogleSignInButton } from "../components/GoogleSignInButton.js";
 import { SavedAddressForm } from "../components/SavedAddressForm.js";
 import { SavedAddressList } from "../components/SavedAddressList.js";
@@ -17,6 +18,8 @@ export function RegisterPage() {
     email: "",
     password: "",
     ustaRating: "",
+    // "" is the initials badge, which is what an account gets if they skip the picker.
+    avatarId: "" as AvatarId | "",
     registrationCode: (searchParams.get("code") ?? "").replace(/\D/g, "").slice(0, 4),
   });
   // Held locally until the account exists; saved along with it.
@@ -37,7 +40,7 @@ export function RegisterPage() {
     }
   }
 
-  function set<K extends keyof typeof form>(key: K, value: string) {
+  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -78,6 +81,13 @@ export function RegisterPage() {
             onChange={(e) => set("registrationCode", e.target.value.replace(/\D/g, ""))}
           />
           <small id="registration-code-hint">6-digit code from your club admin.</small>
+          <AvatarPicker
+            value={form.avatarId}
+            firstName={form.firstName}
+            lastName={form.lastName}
+            onChange={(avatarId) => set("avatarId", avatarId)}
+            hint="Optional. Pick a look for the ladder — you can change it later on your profile."
+          />
           <div className="register-addresses">
             <h2>Where do you travel from?</h2>
             <small>

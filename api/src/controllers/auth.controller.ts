@@ -11,7 +11,7 @@ import {
   GoogleAuthError,
   isGoogleAuthConfigured,
 } from "../auth/googleOAuth.js";
-import { USTA_RATINGS } from "@tennisladder/shared";
+import { AVATAR_IDS, USTA_RATINGS } from "@tennisladder/shared";
 import { toSessionUserDto, type SessionUser } from "../auth/sessionUser.js";
 import { generateOpaqueToken, hashToken } from "../services/tokenService.js";
 import {
@@ -71,6 +71,9 @@ const registerSchema = z.object({
   email: z.string().email("Enter a valid email address"),
   password: passwordSchema,
   ustaRating: z.string().optional(),
+  // One of the predefined portraits, or "" for the initials badge — the same shape
+  // PATCH /api/players/me takes, so the register form and the profile form can share a picker.
+  avatarId: z.union([z.enum(AVATAR_IDS), z.literal("")]).optional(),
   registrationCode: z.string().length(6, "Registration code must be 6 digits"),
   // Optional places the new user travels from; they can also be added later on the profile page.
   addresses: addressListSchema.optional(),
@@ -107,6 +110,8 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
       passwordHash: await hashPassword(data.password),
       // A rating only means something for someone on the ladder.
       ustaRating: participatesInLadder ? (data.ustaRating ?? null) : null,
+      // Unlike a rating, a portrait isn't a ladder concept, so coach-admins get one too.
+      avatarId: data.avatarId || null,
       role,
       participatesInLadder,
       registrationCodeId: code.id,

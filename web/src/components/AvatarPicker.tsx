@@ -12,18 +12,18 @@ export function AvatarPicker({
   firstName,
   lastName,
   onChange,
+  hint = "Shown next to your name in the ladder and on your account menu.",
 }: {
   value: AvatarId | "";
   firstName: string;
   lastName: string;
   onChange: (value: AvatarId | "") => void;
+  hint?: string;
 }) {
   return (
     <fieldset className="avatar-picker">
       <legend>Your avatar</legend>
-      <p className="profile-section-hint">
-        Shown next to your name in the ladder and on your account menu.
-      </p>
+      <p className="profile-section-hint">{hint}</p>
       <div className="avatar-picker-options">
         <label className={`avatar-option${value === "" ? " avatar-option--selected" : ""}`}>
           <input
