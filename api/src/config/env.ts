@@ -26,6 +26,15 @@ function requiredInProduction(name: string, devFallback: string): string {
 
 export const env = {
   port: Number(process.env.PORT ?? 4000),
+  /**
+   * How many reverse proxies sit in front of the API, for Express's `trust proxy`. Hosted
+   * environments are behind the Container Apps ingress; local dev is behind nothing, where this is
+   * harmless because no local client sets X-Forwarded-For. Rate limiting keys off `req.ip`, so
+   * getting this wrong matters in both directions: too low and every caller shares one bucket (one
+   * attacker locks out the club), too high and a caller can spoof their address past the limits.
+   * Verify with GET /api/health, which echoes the address the API resolved for the caller.
+   */
+  trustProxyHops: Number(process.env.TRUST_PROXY_HOPS ?? 1),
   webAppUrl: process.env.WEB_APP_URL ?? "http://localhost:5173",
 
   databaseUrl: required("DATABASE_URL"),

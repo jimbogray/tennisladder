@@ -75,6 +75,35 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 2. **24-hours-after stale result reminder**: `status IN (SCHEDULED, RESULT_PENDING)`, `scheduledDateTime` >24h ago, `staleResultReminderSentAt IS NULL`.
 3. Registration code expiry needs no job — computed at read time from `expiresAt`.
 
+## Rate Limiting
+
+`express-rate-limit` (`api/src/middleware/rateLimit.ts`), with counters in memory — the same
+single-replica assumption the scheduled jobs already make. Scaling past one replica would multiply
+every limit below by the replica count, so that needs a shared store first.
+
+The limits are deliberately asymmetric. A club's players are often on one court-side wifi, so a
+single public IP can legitimately mean twenty people signing in at once; a tight per-IP cap would
+lock out the whole club to inconvenience one attacker. The tight limit is therefore **per account**,
+which is the dimension an attacker actually has to cross, and the per-IP caps are loose backstops.
+
+| Where | Limit | Keyed on |
+| --- | --- | --- |
+| Everything under `/api` except `/api/health` | 1200 / 15 min | IP |
+| `POST /api/auth/login` | 10 failures / 15 min | submitted email |
+| `POST /api/auth/login` | 60 failures / 15 min | IP |
+| `POST /api/auth/request-password-reset`, `/reset-password` | 15 / hour | IP |
+| `POST /api/auth/register`, `/complete-profile` | 20 / hour | IP |
+
+Successful logins don't count against either login limiter (`skipSuccessfulRequests`), so mistyping
+a password twice and then getting it right costs nothing. A throttled login answers 429 whether or
+not the account exists, so the limiter doesn't become an account-enumeration oracle.
+
+All of this depends on `app.set("trust proxy", ...)` (`TRUST_PROXY_HOPS`, default 1): behind the
+Container Apps ingress the socket address is the proxy's, so without it every caller would share
+one bucket. Too high a value is the opposite failure — a caller could spoof `X-Forwarded-For` past
+the limits. `GET /api/health` echoes `clientIp`, the address the API resolved for the caller, which
+is how to check the setting is right in a hosted environment.
+
 ## API Endpoints (grouped)
 
 - **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/providers` (which sign-in methods are configured), `GET /api/auth/google` (+`/callback`), `POST /api/auth/complete-profile`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, `GET /api/auth/verify-email/:token`.
