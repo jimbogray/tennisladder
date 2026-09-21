@@ -6,10 +6,16 @@ import { matchesRouter, adminMatchesRouter } from "./matches.routes.js";
 import { resultsRouter } from "./results.routes.js";
 import { travelRouter } from "./travel.routes.js";
 import { adminRegistrationCodesRouter, adminUsersRouter } from "./admin.routes.js";
+import { globalLimiter } from "../middleware/rateLimit.js";
 
 export const apiRouter = Router();
 
-apiRouter.get("/health", (_req, res) => res.json({ status: "ok" }));
+// Unmetered, and ahead of the global limiter: this is the platform's liveness probe. `clientIp`
+// is the address the API resolved for the caller, which is how the `trust proxy` setting that all
+// the rate limiting depends on gets verified in a hosted environment.
+apiRouter.get("/health", (req, res) => res.json({ status: "ok", clientIp: req.ip }));
+
+apiRouter.use(globalLimiter);
 
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/players", playersRouter);
