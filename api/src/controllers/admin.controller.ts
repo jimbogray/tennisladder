@@ -9,6 +9,7 @@ import {
   generateRegistrationCode,
 } from "../services/registrationCodeService.js";
 import { sendEmail } from "../services/emailService.js";
+import { ErasureBlockedError, erasePersonalData } from "../services/playerDataService.js";
 import { renderInviteEmail } from "../emails/templates/invite.js";
 import { env } from "../config/env.js";
 
@@ -97,6 +98,7 @@ const teamMemberSelect = {
   email: true,
   role: true,
   participatesInLadder: true,
+  removedAt: true,
 } as const;
 
 function toTeamMemberDto(user: {
@@ -106,6 +108,7 @@ function toTeamMemberDto(user: {
   email: string;
   role: UserRole;
   participatesInLadder: boolean;
+  removedAt: Date | null;
 }) {
   return {
     id: user.id,
@@ -113,14 +116,28 @@ function toTeamMemberDto(user: {
     lastName: user.lastName,
     email: user.email,
     accountType: accountTypeFor(user),
+    removedAt: user.removedAt?.toISOString() ?? null,
   };
 }
 
+/**
+ * The team, including people already removed from it.
+ *
+ * Removed members are listed because erasing their data is an admin action and this is the only
+ * page it can be offered from — leaving them out would make a removal one-way into a row nobody
+ * can ever clear. Someone whose data has been erased is left out: what remains of that row is a
+ * placeholder holding old matches together, not a person an admin can do anything with or to.
+ */
 export const listTeamMembers = asyncHandler(async (_req: Request, res: Response) => {
   const users = await prisma.user.findMany({
     // A Google signup that hasn't redeemed an invite code has an account but isn't on the team.
-    where: { removedAt: null, profileCompletedAt: { not: null } },
-    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    where: { profileCompletedAt: { not: null }, personalDataErasedAt: null },
+    // nulls first: current members before removed ones, which Postgres would otherwise reverse.
+    orderBy: [
+      { removedAt: { sort: "asc", nulls: "first" } },
+      { firstName: "asc" },
+      { lastName: "asc" },
+    ],
     select: teamMemberSelect,
   });
   res.json(users.map(toTeamMemberDto));
@@ -236,4 +253,32 @@ export const removeTeamMember = asyncHandler(async (req: Request, res: Response)
     }),
   ]);
   res.status(204).send();
+});
+
+/**
+ * Erases a person's personal data for good: name, email, rating, phone number, saved places and
+ * anything they typed. Their completed matches keep a placeholder name so the other player's
+ * history stays whole — playerDataService.erasePersonalData spells out exactly what survives.
+ *
+ * Separate from the soft removal above, and deliberately not the same button: removing someone is
+ * routine and reversible, this is neither. Unlike removal it also works on someone already
+ * removed, which is the usual order — take them off the team, erase on request later.
+ */
+export const erasePersonalDataForUser = asyncHandler(async (req: Request, res: Response) => {
+  if (req.params.id === req.user!.id) {
+    res.status(409).json({ error: "You can't erase your own data" });
+    return;
+  }
+
+  try {
+    const summary = await erasePersonalData(req.params.id);
+    if (!summary) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    res.json(summary);
+  } catch (err) {
+    if (!(err instanceof ErasureBlockedError)) throw err;
+    res.status(409).json({ error: err.message });
+  }
 });

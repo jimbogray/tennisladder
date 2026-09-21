@@ -49,6 +49,12 @@ export function LoginPage() {
           <p>
             <Link to="/register">Register</Link>
           </p>
+          {/* The signed-in app has these in its footer and the landing page has them too; this
+              page is outside both, and someone who lands straight on it should still be able to
+              read them. */}
+          <p className="legal-footer-links">
+            <Link to="/privacy">Privacy Policy</Link> · <Link to="/terms">Terms</Link>
+          </p>
         </form>
       </div>
     </div>

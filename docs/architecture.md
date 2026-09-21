@@ -38,7 +38,7 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 - **RegistrationCode**: id, code (6-digit string), createdByAdminId, invitedEmail? (set when issued by email; enforced at redemption, so only that address can use the code), usedAt?, createdAt, expiresAt (createdAt + 48h). Active-code uniqueness enforced via a **raw-SQL partial unique index** (`WHERE used_at IS NULL`) added in a hand-edited migration, since Prisma schema syntax has no `WHERE` clause for `@@unique`. Expiry checked at redemption time, not via the index.
 - **Location**: id, name (unique), address?, archivedAt? (soft delete to preserve historical match references), latitude?/longitude?/geocodedAddress? (geocoding cache for the weather forecast and driving times — see below).
 - **Match**: id, challengerId, opponentId, status (enum, see below), proposedDateTime (DateTime), proposedLocationId, proposedComment?, awaitingResponseFromUserId, scheduledDateTime?, resultReportedByUserId?, winnerId?, loserId?, pointsAwarded?, resultConfirmedAt?, isAdminOverride, reminderSentAt? / staleResultReminderSentAt? (job idempotency flags).
-- **MatchEvent**: id, matchId, type (enum: PROPOSED, COUNTER_PROPOSED, ACCEPTED, DECLINED, RESULT_SUBMITTED, RESULT_CONFIRMED, RESULT_DISPUTED, ADMIN_OVERRIDE_RESULT, ADMIN_CANCELLED), actorUserId?, snapshotDateTime?/snapshotLocationId?/comment? (negotiation events), resultOutcome? (result events), createdAt. Indexed on `(matchId, createdAt)` — **this table is the chronological comment/negotiation thread**, rendered on-site and re-embedded in every notification email.
+- **MatchEvent**: id, matchId, type (enum: PROPOSED, AMENDED, COUNTER_PROPOSED, ACCEPTED, DECLINED, WITHDRAWN, CANCELLED, RESULT_SUBMITTED, RESULT_AMENDED, RESULT_CONFIRMED, RESULT_DISPUTED, ADMIN_OVERRIDE_RESULT, ADMIN_CANCELLED), actorUserId?, snapshotDateTime?/snapshotLocationId?/comment? (negotiation events), resultOutcome? (result events), createdAt. Indexed on `(matchId, createdAt)` — **this table is the chronological comment/negotiation thread**, rendered on-site and re-embedded in every notification email.
 - **MatchResultToken**: id, matchId, userId, outcome (WON|LOST), token (unique random string), usedAt?. One row per (match, user, outcome) — this is what the "I won"/"I lost" email links resolve against. All unused tokens for a match are voided the moment it reaches COMPLETED.
 - **RefreshToken**: id, userId, tokenHash (unique, store hash not raw), expiresAt, revokedAt?.
 - **PointsAdjustment**: id, userId, adjustedByAdminId, previousPoints, newPoints, reason? — audit trail for admin manual point overrides.
@@ -108,9 +108,9 @@ is how to check the setting is right in a hosted environment.
 ## API Endpoints (grouped)
 
 - **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/providers` (which sign-in methods are configured), `GET /api/auth/google` (+`/callback`), `POST /api/auth/complete-profile`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, `GET /api/auth/verify-email/:token`.
-- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name only), `GET`/`POST /api/players/me/addresses` and `DELETE /api/players/me/addresses/:id` (own saved addresses only), `POST /api/players/me/phone` (texts a confirmation code), `POST /api/players/me/phone/verify` and `DELETE /api/players/me/phone` (own notification number only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
+- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name only), `GET /api/players/me/data` (a copy of everything held about the caller — see Personal Data below), `GET`/`POST /api/players/me/addresses` and `DELETE /api/players/me/addresses/:id` (own saved addresses only), `POST /api/players/me/phone` (texts a confirmation code), `POST /api/players/me/phone/verify` and `DELETE /api/players/me/phone` (own notification number only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
 - **Registration codes**: `POST /api/admin/registration-codes`, `GET /api/admin/registration-codes` (Admin).
-- **Team**: `GET /api/admin/users` (every registered user who hasn't been removed, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id` (Admin). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
+- **Team**: `GET /api/admin/users` (every registered user whose data hasn't been erased, removed ones included and flagged with `removedAt`, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/erase-personal-data` (Admin — see Personal Data below). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
 - **Weather**: `GET /api/locations/:id/forecast[?at=<ISO>]` (Player/Admin) — a 7-day outlook, or with `at` the hours around a match time. Shown on the propose/amend/counter forms.
 - **Travel**: `GET /api/matches/:id/travel-plan` (the caller's own journey only) — when to leave for a scheduled match, shown on the match page. `GET /api/travel/departure?addressId=&locationId=&at=` answers the same question for a match that doesn't exist yet, from one of the caller's own saved addresses — shown on the propose/amend/counter forms.
@@ -202,6 +202,46 @@ Users save labelled addresses (Home, Office, or a custom label) at registration 
 - **Origins live in `MatchTravelOrigin`, not on `Match`.** Match rows are returned whole to both players and in the public match lists, so a column there would leak. For the same reason, choosing an origin writes no `MatchEvent`: the event thread is shown to both players and embedded in emails.
 - **Request semantics.** The propose, amend, counter and accept bodies take an optional `travelOriginAddressId`. If it's omitted, the current choice stays; `null` clears it; an id must belong to the caller. The SPA omits it while addresses are still loading, so a fast submit can't clear an earlier choice.
 - **Addresses are referenced, not copied.** Deleting an address cascades to the origins that used it, and with it the departure time worked out from it.
+
+## Personal Data: Copies and Erasure
+
+Two halves of the same question — what the app holds about one player — deliberately live in one
+module, `api/src/services/playerDataService.ts`. Whatever the export says is held is what the
+erasure has to remove, so a new personal column added to the schema and wired into only one of them
+is a bug in the other.
+
+- **The export is self-service.** `GET /api/players/me/data` returns everything held about the
+  caller, and the profile page turns it into a downloaded file. It's shaped for the person it's
+  about rather than for the app: names and courts are spelled out instead of referenced by id, and
+  an `about` array explains in plain words what's in the file and what isn't. The only thing in
+  there that isn't strictly theirs is an opponent's name on a shared match, which they already see
+  on the match itself. Built in the browser from the JSON body, because the request needs the
+  bearer token and a plain `<a href>` can't carry one.
+- **Erasure is an admin action on someone already removed**, `POST /api/admin/users/:id/erase-personal-data`,
+  offered in its own section of the admin Team page rather than beside Remove. Removal is routine
+  and undoable; this isn't, and the two shouldn't be adjacent buttons. So the flow is two steps:
+  take someone off the team, erase later if they ask. Refused for the caller's own account, while
+  the user has unfinished matches (a placeholder mid-negotiation would strand their opponent), and
+  on a row already erased. `User.personalDataErasedAt` records it, makes it idempotent, and is what
+  keeps an erased row out of the Team listing.
+- **What erasure deletes**: saved places and the match origins pointing at them, phone
+  verifications, refresh tokens, password-reset tokens and result tokens, every comment the player
+  typed (on `MatchEvent`, on a challenge they opened, and on a cancellation the event trail shows
+  was theirs), the reason on any points adjustment about them, and the invited email and admin note
+  on the registration code they redeemed. The `User` row's name, email, password hash, Google id,
+  rating and phone number are overwritten in the same transaction — one transaction because a
+  half-erased row is worse than an un-erased one, since it reads as done.
+- **What survives, and why.** The `User` row itself, as "Former member" with a unique
+  `erased-<id>@removed.invalid` address: `Match`, `MatchEvent` and `PointsAdjustment` all reference
+  it and none of them cascade, so deleting it would take the *other* player's completed matches
+  with it. Points, match rows, times, courts and results stay for the same reason — they are the
+  ladder's record and the opponent's, not only the erased player's. The privacy policy says this in
+  the same words, under "Getting a copy, and having it erased".
+- **The policies are linked where consent happens.** `/privacy` and `/terms` are public routes
+  (`SiteFooter` in the signed-in layout and on the landing page), and the registration form links
+  both immediately above the button that creates the account, since that is the moment someone
+  agrees to them. The login page carries the pair too, being outside both the layout and the
+  landing page.
 
 ## Driving Times
 

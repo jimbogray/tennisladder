@@ -2,14 +2,137 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AccountType } from "@tennisladder/shared";
 import {
+  erasePersonalData,
   fetchTeamMembers,
   removeTeamMember,
   updateTeamMemberAccountType,
+  type ErasureSummaryDto,
   type TeamMemberDto,
 } from "../api/admin.js";
 import { ApiError } from "../api/client.js";
 import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPES } from "../lib/accountTypes.js";
 import { useAuth } from "../hooks/useAuth.js";
+
+/**
+ * People already off the team, listed only so their data can be erased on request.
+ *
+ * Erasure is deliberately not offered beside Remove on a current member: removing someone is
+ * routine and undoable, this isn't, and the two shouldn't be adjacent buttons. Once erased a row
+ * stops being listed at all, so this list is the queue of removals nobody has asked to clear.
+ */
+function RemovedMembers({
+  members,
+  onErased,
+}: {
+  members: TeamMemberDto[];
+  onErased: () => Promise<unknown>;
+}) {
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [erasingId, setErasingId] = useState<string | null>(null);
+  const [error, setError] = useState<{ memberId: string; message: string } | null>(null);
+  const [done, setDone] = useState<{ name: string; summary: ErasureSummaryDto } | null>(null);
+
+  async function erase(member: TeamMemberDto) {
+    setError(null);
+    setErasingId(member.id);
+    try {
+      const summary = await erasePersonalData(member.id);
+      setConfirmingId(null);
+      setDone({ name: `${member.firstName} ${member.lastName}`, summary });
+      await onErased();
+    } catch (err) {
+      setConfirmingId(null);
+      setError({
+        memberId: member.id,
+        message:
+          err instanceof ApiError ? err.message : "Could not erase this person's data. Please try again.",
+      });
+    } finally {
+      setErasingId(null);
+    }
+  }
+
+  if (members.length === 0 && !done) return null;
+
+  return (
+    <section className="team-removed">
+      <h2>Removed from the team</h2>
+      <p>
+        These people can no longer sign in. Their details are still on file so their past matches
+        read properly. If someone asks for their details to be removed, erase them here.
+      </p>
+      {done ? (
+        <p role="status">
+          {done.name}'s details have been erased: {done.summary.savedPlacesDeleted} saved{" "}
+          {done.summary.savedPlacesDeleted === 1 ? "place" : "places"} deleted,{" "}
+          {done.summary.messagesCleared}{" "}
+          {done.summary.messagesCleared === 1 ? "message" : "messages"} cleared, and{" "}
+          {done.summary.matchesKept} {done.summary.matchesKept === 1 ? "match" : "matches"} kept
+          against a placeholder name.
+        </p>
+      ) : null}
+      <ul className="team-removed-list">
+        {members.map((member) => {
+          const name = `${member.firstName} ${member.lastName}`;
+          const erasing = erasingId === member.id;
+          return (
+            <li key={member.id}>
+              <div className="team-removed-row">
+                <div>
+                  <strong>{name}</strong>
+                  <span className="team-email-inline">{member.email}</span>
+                </div>
+                {confirmingId === member.id ? null : (
+                  <button
+                    type="button"
+                    className="button-danger"
+                    aria-label={`Erase ${name}'s personal data`}
+                    disabled={erasing}
+                    onClick={() => {
+                      setError(null);
+                      setConfirmingId(member.id);
+                    }}
+                  >
+                    Erase data
+                  </button>
+                )}
+              </div>
+              {confirmingId === member.id ? (
+                <div className="team-remove-confirm">
+                  <p>
+                    Erase everything the ladder holds about {member.firstName}? Their name, email,
+                    rating, phone number, saved places and anything they typed are deleted for good.
+                    Matches they played are kept under a placeholder name so the other player's
+                    history stays intact. This can't be undone.
+                  </p>
+                  <div className="team-remove-actions">
+                    <button
+                      type="button"
+                      className="button-danger"
+                      disabled={erasing}
+                      onClick={() => erase(member)}
+                    >
+                      {erasing ? "Erasing…" : "Erase for good"}
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      disabled={erasing}
+                      onClick={() => setConfirmingId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {error?.memberId === member.id ? <p role="alert">{error.message}</p> : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 export function AdminTeamPage() {
   const { user } = useAuth();
@@ -92,7 +215,9 @@ export function AdminTeamPage() {
             </tr>
           </thead>
           <tbody>
-            {data.map((member) => {
+            {data
+              .filter((member) => member.removedAt === null)
+              .map((member) => {
               const isMe = member.id === user?.id;
               const name = `${member.firstName} ${member.lastName}`;
               const selected = staged[member.id] ?? member.accountType;
@@ -185,11 +310,18 @@ export function AdminTeamPage() {
                     {error?.memberId === member.id ? <p role="alert">{error.message}</p> : null}
                   </td>
                 </tr>
-              );
-            })}
+                );
+              })}
           </tbody>
         </table>
       )}
+
+      {data ? (
+        <RemovedMembers
+          members={data.filter((member) => member.removedAt !== null)}
+          onErased={() => queryClient.invalidateQueries({ queryKey: ["admin", "team"] })}
+        />
+      ) : null}
     </div>
   );
 }
