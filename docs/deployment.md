@@ -90,8 +90,20 @@ with its own managed identity.
   and a text's phone-number confirmation code — so those flows can still be completed:
   `az containerapp logs show -g tennisladder-staging-rg -n tennisladder-staging-api --follow`.
   (The variable is named for email because it predates SMS.) Those links and codes are live
-  credentials, which is why production never sets the flag. Never copy production data into staging
-  while messaging is enabled there: reminder jobs would message real players.
+  credentials, which is why production never sets the flag.
+
+  To exercise the notification emails themselves rather than read them out of a log, give staging
+  Communication Services and set `EMAIL_REDIRECT_TO` to the tester's own address. Every email then
+  goes there whoever it was addressed to, with the intended recipient at the front of the subject
+  (`[to: sam@club.example] Match confirmed vs Alex`), so one inbox can hold both sides of a
+  negotiation and still be read. Bodies are untouched: the links are built from `WEB_APP_URL`, so
+  they open the staging site and settle staging's own tokens, exactly as they would in production.
+  This is also what makes copying production data into staging survivable — without the redirect,
+  the reminder jobs would mail real players, so never enable messaging there without it.
+  `provision-environment.sh` refuses `EMAIL_REDIRECT_TO` on production; the app can't enforce that
+  itself, since staging runs with `NODE_ENV=production` too. To stop redirecting, unset it on the
+  Container App (`az containerapp update ... --remove-env-vars EMAIL_REDIRECT_TO`) — re-running the
+  provisioning script without it leaves an already-set value in place.
 - **Search engines** — the staging deploy publishes a `robots.txt` that disallows indexing.
 
 ## Why the domain is load-bearing

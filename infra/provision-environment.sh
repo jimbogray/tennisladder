@@ -15,6 +15,9 @@
 #   ACS_CONNECTION_STRING  Enables outbound email. Leave unset for staging so it can't email
 #                          real people.
 #   EMAIL_FROM_ADDRESS     Sender address; defaults to ladder@<domain>.
+#   EMAIL_REDIRECT_TO      Diverts every email to this address, naming the player it was
+#                          addressed to in the subject, so notifications can be tested without
+#                          mailing real members. Non-production only; refused on production.
 #   SMS_FROM_NUMBER        E.164 number provisioned on the ACS resource, for confirmation
 #                          code texts. Optional; without it the API sends no SMS.
 #   GOOGLE_CLIENT_ID       Enables Google sign-in, both needed together. From an OAuth 2.0 Web
@@ -26,6 +29,13 @@ set -euo pipefail
 
 load_environment "${1:-}"
 require_az_login
+
+# Diverting mail is a testing aid, and production's whole job is to reach real players. Catching it
+# here rather than in the API is deliberate: staging runs with NODE_ENV=production too, so the app
+# has no way to tell the two apart.
+if [ -n "${EMAIL_REDIRECT_TO:-}" ] && [ "$ENVIRONMENT" = "production" ]; then
+  die "EMAIL_REDIRECT_TO is for non-production environments; production must email real players"
+fi
 
 PENDING="<pending>"
 
@@ -205,6 +215,10 @@ ENV_VARS=(
 if has_secret acs-connection || [ -n "${ACS_CONNECTION_STRING:-}" ]; then
   ENV_VARS+=("AZURE_COMMUNICATION_CONNECTION_STRING=secretref:acs-connection")
   ENV_VARS+=("EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-ladder@${DOMAIN}}")
+  # Only meaningful where email actually sends, which is why it sits inside this block.
+  if [ -n "${EMAIL_REDIRECT_TO:-}" ]; then
+    ENV_VARS+=("EMAIL_REDIRECT_TO=${EMAIL_REDIRECT_TO}")
+  fi
   # Texting confirmation codes needs a number provisioned on the same ACS resource, which email
   # doesn't, so it's set only where one exists — the API leaves SMS off without it.
   if [ -n "${SMS_FROM_NUMBER:-}" ]; then

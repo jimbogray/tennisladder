@@ -53,6 +53,18 @@ export const env = {
   azureCommunicationConnectionString: process.env.AZURE_COMMUNICATION_CONNECTION_STRING ?? "",
   emailFromAddress: process.env.EMAIL_FROM_ADDRESS ?? "ladder@example.com",
   /**
+   * Divert every outbound email to this address instead of the player it was addressed to, with
+   * that player's address named in the subject line. For dev and staging, where the point is to
+   * exercise the real notification flows without mailing real club members: nothing in the body is
+   * rewritten, so the links still point at this environment's own site and settle against its own
+   * database, exactly as they would in production.
+   *
+   * Blank (the default) means no redirect, so production behaves as it always has. It can't be
+   * gated on NODE_ENV — staging runs as production too — so it is opt-in per environment, and
+   * infra/provision-environment.sh refuses to set it on production.
+   */
+  emailRedirectTo: (process.env.EMAIL_REDIRECT_TO ?? "").trim(),
+  /**
    * Sender number for outbound SMS, in E.164 (+15551234567), provisioned on the same Azure
    * Communication Services resource that sends the email. Blank leaves SMS off even when email is
    * configured — ACS won't send from a number it doesn't own, and a deployment that never texts
