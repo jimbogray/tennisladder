@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { AccountType, UserRole } from "@prisma/client";
+import { Prisma, type AccountType, type UserRole } from "@prisma/client";
 import { prisma } from "../config/prisma.js";
 import { env } from "../config/env.js";
 
@@ -7,10 +7,15 @@ function generateSixDigitCode(): string {
   return String(randomInt(0, 1000000)).padStart(6, "0");
 }
 
+/** A unique-constraint violation, which for this insert means the code is already in active use. */
+function isCodeCollision(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+}
+
 /**
  * Generates a unique, active, 6-digit registration code. Active-code uniqueness is enforced at
- * the DB level by a partial unique index (WHERE used_at IS NULL) — see prisma/MIGRATION_NOTES.md —
- * so on the rare collision this simply retries.
+ * the DB level by a partial unique index (WHERE "usedAt" IS NULL), added in the
+ * `registration_code_active_unique` migration, so on the rare collision this simply retries.
  */
 export async function generateRegistrationCode(
   createdByAdminId: string,
@@ -32,8 +37,10 @@ export async function generateRegistrationCode(
         },
       });
     } catch (err) {
-      // TODO: narrow to Prisma unique-constraint violation (P2002) before retrying; rethrow otherwise.
-      if (attempt === 4) throw err;
+      // A collision is the one failure worth another go with a fresh code. Anything else — a
+      // dropped connection, a createdByAdminId that isn't a real admin — would fail identically
+      // five times over, so it surfaces immediately instead.
+      if (!isCodeCollision(err) || attempt === 4) throw err;
     }
   }
   throw new Error("Failed to generate a unique registration code");
