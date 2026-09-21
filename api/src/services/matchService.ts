@@ -1,5 +1,10 @@
-import { Prisma, MatchEventType, MatchStatus } from "@prisma/client";
+import { Prisma, MatchEventType, MatchStatus, ResultOutcome } from "@prisma/client";
 import { prisma } from "../config/prisma.js";
+import { env } from "../config/env.js";
+import { generateOpaqueToken, hashToken } from "./tokenService.js";
+import { sendEmail } from "./emailService.js";
+import { renderMatchConfirmedEmail } from "../emails/templates/matchConfirmed.js";
+import { formatMatchDateTimeForEmail } from "../emails/formatDateTime.js";
 
 /** Thrown for invalid match actions (bad turn, self-challenge, etc.). Callers surface as a 400. */
 export class MatchValidationError extends Error {}
@@ -254,6 +259,76 @@ export async function counterPropose(matchId: string, actingUserId: string, inpu
   });
 }
 
+/** One "I won"/"I lost" link: the raw token that goes in the email, and who it speaks for. */
+interface IssuedResultToken {
+  userId: string;
+  outcome: ResultOutcome;
+  rawToken: string;
+}
+
+/**
+ * The four result links a confirmed match needs — "I won" and "I lost" for each player. Only the
+ * hash is stored, the same way invite and password reset tokens are handled: the raw token lives
+ * in the email and nowhere else, so read access to the database doesn't let anyone submit a result.
+ */
+function issueResultTokens(challengerId: string, opponentId: string): IssuedResultToken[] {
+  return [challengerId, opponentId].flatMap((userId) =>
+    [ResultOutcome.WON, ResultOutcome.LOST].map((outcome) => ({
+      userId,
+      outcome,
+      rawToken: generateOpaqueToken(),
+    })),
+  );
+}
+
+/**
+ * Emails both players their confirmation, each with their own pair of result links.
+ *
+ * Deliberately never throws: by the time this runs the match is accepted and committed, so a mail
+ * failure mustn't turn a successful accept into an error for the player who accepted. Nothing is
+ * lost either way — both players can still report the result on the site.
+ */
+async function sendMatchConfirmedEmails(
+  match: { id: string; challengerId: string; opponentId: string; proposedLocationId: string },
+  scheduledDateTime: Date,
+  tokens: IssuedResultToken[],
+): Promise<void> {
+  try {
+    const [challenger, opponent, location] = await Promise.all([
+      prisma.user.findUniqueOrThrow({ where: { id: match.challengerId } }),
+      prisma.user.findUniqueOrThrow({ where: { id: match.opponentId } }),
+      prisma.location.findUniqueOrThrow({ where: { id: match.proposedLocationId } }),
+    ]);
+
+    const when = formatMatchDateTimeForEmail(scheduledDateTime);
+    const linkFor = (userId: string, outcome: ResultOutcome) => {
+      const issued = tokens.find((token) => token.userId === userId && token.outcome === outcome);
+      if (!issued) throw new Error(`no ${outcome} result token was issued for user ${userId}`);
+      return `${env.webAppUrl}/results/confirm/${issued.rawToken}`;
+    };
+
+    for (const [recipient, other] of [
+      [challenger, opponent],
+      [opponent, challenger],
+    ] as const) {
+      const { subject, html } = renderMatchConfirmedEmail({
+        recipientFirstName: recipient.firstName,
+        opponentFirstName: other.firstName,
+        scheduledDateTime: when,
+        locationName: location.name,
+        wonResultUrl: linkFor(recipient.id, ResultOutcome.WON),
+        lostResultUrl: linkFor(recipient.id, ResultOutcome.LOST),
+      });
+      await sendEmail({ to: recipient.email, subject, html });
+    }
+  } catch (error) {
+    console.error(
+      `[matchService] match ${match.id} was accepted but its confirmation emails failed`,
+      error,
+    );
+  }
+}
+
 /**
  * Locks in the standing offer. Only the player who owes a reply can accept — otherwise a player
  * could accept their own proposal.
@@ -273,9 +348,9 @@ export async function acceptMatch(
   }
   await assertOwnAddress(actingUserId, travelOriginAddressId);
 
-  // TODO: generate the 4 MatchResultToken rows (WON/LOST x challenger/opponent) and send
-  // confirmation emails once the result-submission flow exists.
-  return prisma.$transaction(async (tx) => {
+  const resultTokens = issueResultTokens(match.challengerId, match.opponentId);
+
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -295,10 +370,25 @@ export async function acceptMatch(
       },
     });
 
+    await tx.matchResultToken.createMany({
+      data: resultTokens.map(({ userId, outcome, rawToken }) => ({
+        matchId,
+        userId,
+        outcome,
+        token: hashToken(rawToken),
+      })),
+    });
+
     await applyTravelOrigin(tx, matchId, actingUserId, travelOriginAddressId);
 
     return updated;
   });
+
+  // Only once the transaction has committed: an email promising links that a rolled-back
+  // transaction never stored would be worse than sending nothing at all.
+  await sendMatchConfirmedEmails(match, match.proposedDateTime, resultTokens);
+
+  return updated;
 }
 
 /** Rejects the challenge outright. Terminal — a fresh challenge means a new Match. */
@@ -567,6 +657,13 @@ export async function confirmResult(matchId: string, actingUserId: string) {
 
     await tx.matchEvent.create({
       data: { matchId, type: MatchEventType.RESULT_CONFIRMED, actorUserId: actingUserId },
+    });
+
+    // The match is settled, so every unused link dies with it — an "I won" link still sitting in
+    // someone's inbox must not be able to reopen a completed match.
+    await tx.matchResultToken.updateMany({
+      where: { matchId, usedAt: null },
+      data: { usedAt: new Date() },
     });
 
     return updated;

@@ -351,6 +351,5 @@ outbound port 5432, which some office and public networks do. Try another networ
   partial unique index (`WHERE used_at IS NULL`) that was never created, and
   `registrationCodeService` assumes it exists when it retries on collision.
 - **Disputed results have no resolution path.** `adminOverrideResult` is still a stub.
-- **Result tokens are never generated**, so the "I won / I lost" email links are unreachable.
 - **No backup policy configured.** Flexible Server keeps 7 days of automated backups by default;
   raise it for production and decide on geo-redundancy before real data lands.

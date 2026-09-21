@@ -52,6 +52,13 @@ export const env = {
   logEmailLinks: process.env.LOG_EMAIL_LINKS ? process.env.LOG_EMAIL_LINKS === "true" : !isProduction,
 
   /**
+   * IANA zone the club plays in, used to write match times into emails. Emails are rendered on the
+   * server, so unlike the SPA there's no viewer locale to defer to. UTC keeps the fallback honest
+   * rather than silently guessing the host's zone, but any club not on it should set this.
+   */
+  clubTimeZone: process.env.CLUB_TIMEZONE ?? "UTC",
+
+  /**
    * OSRM routing server used for driving times (travelService). Defaults to the project's public
    * demo server, which is fine for a club-sized ladder but asks for light usage — point this at
    * your own instance if that stops being true.
