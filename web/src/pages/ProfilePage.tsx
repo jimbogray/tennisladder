@@ -4,7 +4,6 @@ import { USTA_RATINGS, type UstaRating } from "@tennisladder/shared";
 import { updateMyProfile } from "../api/players.js";
 import { createAddress, deleteAddress, fetchMyAddresses } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
-import { PhoneNumberSection } from "../components/PhoneNumberSection.js";
 import { SavedAddressForm } from "../components/SavedAddressForm.js";
 import { SavedAddressList } from "../components/SavedAddressList.js";
 import { useAuth } from "../hooks/useAuth.js";
@@ -183,7 +182,11 @@ export function ProfilePage() {
         </button>
       </form>
 
-      <PhoneNumberSection phoneNumber={user.phoneNumber} onChange={updateUser} />
+      {/* The phone-number section is deliberately not rendered yet: the club's toll-free number
+          isn't carrier-verified, so a code entered here wouldn't be delivered. Everything behind
+          it is in place — PhoneNumberSection, the API, and User.phoneNumber — so switching it back
+          on is restoring this one line and its import:
+          <PhoneNumberSection phoneNumber={user.phoneNumber} onChange={updateUser} /> */}
 
       <AddressesSection />
     </div>
