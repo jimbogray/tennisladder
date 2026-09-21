@@ -8,6 +8,25 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    # The API test suite runs against a real Postgres rather than a mocked Prisma client: the
+    # invariants worth testing (transactional points, the partial unique index on active
+    # registration codes) only exist in the database.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tennisladder_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,9 +42,13 @@ jobs:
       # Prisma's generated client is a typecheck dependency for the API.
       - run: npx prisma generate --schema api/prisma/schema.prisma
 
-      # There is no test runner in this repo; tsc --noEmit is the only automated signal.
       - name: Typecheck
         run: npm run lint
+
+      - name: Test
+        run: npm test
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tennisladder_test?schema=public
 
       - name: Build web
         run: npm run build --workspace=@tennisladder/web
