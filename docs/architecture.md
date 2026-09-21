@@ -70,13 +70,22 @@ loser.points unchanged
 
 ## Calendar export
 
-A `SCHEDULED` match can be put in a player's own calendar from two places — the match page and the
-confirmation email — both of which link to Google Calendar's event template URL
-(`packages/shared/src/calendar.ts`). That URL prefills an event the player saves themselves, so
-nobody has to connect a Google account to the ladder and the API calls no calendar service. The
-event carries a UTC instant, which each calendar renders in its owner's own zone, so this is
-unaffected by `CLUB_TIMEZONE`. The ladder records no match duration, so the entry assumes 90
-minutes.
+A `SCHEDULED` match can be put in a player's own calendar two ways, both built in
+`packages/shared/src/calendar.ts` from the same event, and both offered only to the match's own two
+players:
+
+- **Google Calendar**, via its event template URL — on the match page and in the confirmation
+  email. The URL prefills an event the player saves themselves, so nobody has to connect a Google
+  account to the ladder and the API calls no calendar service.
+- **A .ics download**, for Apple Calendar, Outlook and anything else that opens one. The match page
+  builds the file in the browser from data it already has, so this needs no endpoint of its own.
+  The confirmation email doesn't carry it: an email would need either an attachment or a
+  tokenised public URL, neither of which exists yet.
+
+The event carries a UTC instant, which each calendar renders in its owner's own zone, so this is
+unaffected by `CLUB_TIMEZONE` and the .ics needs no VTIMEZONE. The match id becomes the .ics UID,
+so downloading twice updates one event rather than making two. The ladder records no match
+duration, so the entry assumes 90 minutes.
 
 ## Scheduled Jobs
 

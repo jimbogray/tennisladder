@@ -904,13 +904,26 @@ tbody tr.row-me td:first-child {
   color: var(--ink-soft);
 }
 
-/* Sits under the scheduled time as a quiet aside, not an action competing with the buttons. */
+/* Sits under the scheduled time as a quiet aside, not an action competing with the buttons. The
+   .ics download is a button because it builds its file in the page, so it's styled to read as the
+   link beside it. */
 .match-detail-calendar {
-  display: block;
-  width: fit-content;
+  display: flex;
+  gap: 0.75rem;
   margin-top: 0.15rem;
   font-weight: 600;
   font-size: 0.88rem;
+}
+
+.match-detail-calendar .link-button {
+  font-size: inherit;
+  /* .link-button underlines by default; here it sits beside a real link, and links on this site
+     only underline on hover. */
+  text-decoration: none;
+}
+
+.match-detail-calendar .link-button:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 30rem) {

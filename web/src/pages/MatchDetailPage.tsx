@@ -1,7 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { googleCalendarUrlForMatch, type PublicUserDto, type ResultOutcome } from "@tennisladder/shared";
+import {
+  googleCalendarUrlForMatch,
+  matchCalendarFileName,
+  matchCalendarIcs,
+  type MatchCalendarInput,
+  type PublicUserDto,
+  type ResultOutcome,
+} from "@tennisladder/shared";
 import {
   acceptMatch,
   adminCancelMatch,
@@ -37,6 +44,21 @@ function PlayerLine({ player, isCurrentUser }: { player: PublicUserDto; isCurren
       {isCurrentUser ? <span className="you-badge">you</span> : null}
     </>
   );
+}
+
+/**
+ * Hands the browser a .ics file. Built on the spot rather than fetched: the page already has
+ * everything the event needs, so a download costs no round trip and no new endpoint.
+ */
+function downloadIcs(input: MatchCalendarInput) {
+  const blob = new Blob([matchCalendarIcs(input)], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = matchCalendarFileName(input);
+  link.click();
+  // Not immediately: Safari reads the object URL after the click handler has returned.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 type Mode =
@@ -154,16 +176,17 @@ export function MatchDetailPage() {
   const travelOriginAddressId = addresses ? toTravelOriginAddressId(travelOriginId) : undefined;
   // Only a match that's actually arranged belongs in a calendar, and only its own players have
   // any use for it there.
-  const calendarUrl =
+  const calendarEvent: MatchCalendarInput | null =
     isParticipant && data.status === "SCHEDULED" && data.scheduledDateTime
-      ? googleCalendarUrlForMatch({
+      ? {
           challengerName: `${data.challenger.firstName} ${data.challenger.lastName}`,
           opponentName: `${data.opponent.firstName} ${data.opponent.lastName}`,
           scheduledDateTime: data.scheduledDateTime,
           locationName: data.proposedLocation.name,
           locationAddress: data.proposedLocation.address,
           matchUrl: window.location.href,
-        })
+          matchId: data.id,
+        }
       : null;
   const travelOriginPicker = (
     <div className="travel-origin-field">
@@ -202,15 +225,19 @@ export function MatchDetailPage() {
         <dt>{data.scheduledDateTime ? "Scheduled" : "Proposed"}</dt>
         <dd>
           {formatMatchDateTime(data.scheduledDateTime ?? data.proposedDateTime)}
-          {calendarUrl ? (
-            <a
-              className="match-detail-calendar"
-              href={calendarUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Add to Google Calendar
-            </a>
+          {calendarEvent ? (
+            <span className="match-detail-calendar">
+              <a
+                href={googleCalendarUrlForMatch(calendarEvent)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Add to Google Calendar
+              </a>
+              <button type="button" className="link-button" onClick={() => downloadIcs(calendarEvent)}>
+                Download .ics
+              </button>
+            </span>
           ) : null}
         </dd>
 
