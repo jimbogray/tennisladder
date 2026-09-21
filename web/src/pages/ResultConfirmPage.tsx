@@ -7,6 +7,7 @@ export function ResultConfirmPage() {
   const { token } = useParams<{ token: string }>();
   const [outcome, setOutcome] = useState<ResultOutcome | null>(null);
   const [status, setStatus] = useState<"pending" | "resolved" | "submitted" | "error">("pending");
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -19,8 +20,15 @@ export function ResultConfirmPage() {
   }, [token]);
 
   async function confirm() {
-    await submitResultViaToken(token!);
-    setStatus("submitted");
+    setSubmitError(null);
+    try {
+      await submitResultViaToken(token!);
+      setStatus("submitted");
+    } catch (error) {
+      // The link can go stale between loading this page and pressing the button — the other
+      // player may have settled the match in the meantime.
+      setSubmitError(error instanceof Error ? error.message : "Something went wrong. Try again.");
+    }
   }
 
   if (status === "pending") return <p>Loading…</p>;
@@ -30,10 +38,11 @@ export function ResultConfirmPage() {
   return (
     <div>
       <h1>Confirm result</h1>
-      <p>You reported: {outcome}</p>
+      <p>You're reporting: {outcome === "WON" ? "you won" : "you lost"}</p>
       <button type="button" onClick={confirm}>
         Confirm
       </button>
+      {submitError ? <p role="alert">{submitError}</p> : null}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { escapeHtml } from "../escapeHtml.js";
+
 export interface MatchConfirmedTemplateInput {
   recipientFirstName: string;
   opponentFirstName: string;
@@ -10,6 +12,22 @@ export interface MatchConfirmedTemplateInput {
 export function renderMatchConfirmedEmail(input: MatchConfirmedTemplateInput): { subject: string; html: string } {
   return {
     subject: `Match confirmed vs ${input.opponentFirstName}`,
-    html: `<p>Hi ${input.recipientFirstName},</p><p>TODO: confirmation details + "I won" (${input.wonResultUrl}) / "I lost" (${input.lostResultUrl}) links.</p>`,
+    html: `
+      <p>Hi ${escapeHtml(input.recipientFirstName)},</p>
+      <p>
+        You're playing ${escapeHtml(input.opponentFirstName)} on
+        ${escapeHtml(input.scheduledDateTime)} at ${escapeHtml(input.locationName)}.
+      </p>
+      <p>Once you've played, tell us how it went:</p>
+      <p>
+        <a href="${escapeHtml(input.wonResultUrl)}">I won</a>
+        &nbsp;or&nbsp;
+        <a href="${escapeHtml(input.lostResultUrl)}">I lost</a>
+      </p>
+      <p>
+        Whoever reports first, the other player is asked to agree before the ladder moves. These
+        links are yours alone, and they stop working once the match is settled.
+      </p>
+    `.trim(),
   };
 }
