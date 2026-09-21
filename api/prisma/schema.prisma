@@ -94,6 +94,14 @@ model User {
   emailVerifiedAt    DateTime?
   profileCompletedAt DateTime?
 
+  // The user's notification number in E.164 (+15551234567). Null means none registered. A number
+  // only lands here once a texted code has been confirmed, so this column *is* the verified state
+  // — there's no second flag that could drift out of step with it. A number still being confirmed
+  // sits on PhoneVerification instead, so an abandoned or mistyped change can't clobber one that
+  // already works. Not unique: a household can share a number, and verification already stops
+  // anyone attaching a number they can't receive texts on.
+  phoneNumber String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -108,8 +116,37 @@ model User {
   registrationCodesCreated RegistrationCode[] @relation("RegistrationCodeCreator")
   addresses                UserAddress[]
   matchTravelOrigins       MatchTravelOrigin[]
+  phoneVerifications       PhoneVerification[]
 
   @@map("users")
+}
+
+// A texted confirmation code for a phone number a user is registering for notifications. The
+// candidate number lives here, not on User, until the code comes back — see User.phoneNumber.
+model PhoneVerification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The candidate number, normalized to E.164 before it's stored.
+  phoneNumber String
+
+  // sha256 of the six-digit code, never the code itself — the same treatment password reset
+  // tokens get. Deliberately not unique: six digits collide across users, and this code is only
+  // ever checked against the signed-in user's own newest row, so it's a second factor on their
+  // session rather than a credential that stands on its own.
+  codeHash String
+
+  // Six digits is cheap to guess in bulk, so a row is spent after a handful of wrong tries
+  // instead of staying open until it expires.
+  attempts Int @default(0)
+
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("phone_verifications")
 }
 
 // A place the user travels to matches from (home, office, …), kept for driving directions and

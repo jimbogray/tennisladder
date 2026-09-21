@@ -1,4 +1,5 @@
 import { Link, Navigate } from "react-router-dom";
+import { SiteFooter } from "../components/SiteFooter.js";
 import { useAuth } from "../hooks/useAuth.js";
 
 export function LandingPage() {
@@ -15,6 +16,7 @@ export function LandingPage() {
         <Link to="/login">Log in</Link>
         <Link to="/register">Register</Link>
       </div>
+      <SiteFooter />
     </div>
   );
 }

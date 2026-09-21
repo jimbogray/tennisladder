@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAdmin, requireAuth } from "../auth/middleware.js";
 import * as players from "../controllers/players.controller.js";
 import * as addresses from "../controllers/addresses.controller.js";
+import * as phone from "../controllers/phone.controller.js";
 
 export const playersRouter = Router();
 
@@ -12,6 +13,9 @@ playersRouter.patch("/me", requireAuth, players.updateMe);
 playersRouter.get("/me/addresses", requireAuth, addresses.listMyAddresses);
 playersRouter.post("/me/addresses", requireAuth, addresses.createMyAddress);
 playersRouter.delete("/me/addresses/:id", requireAuth, addresses.deleteMyAddress);
+playersRouter.post("/me/phone", requireAuth, phone.startMyPhoneVerification);
+playersRouter.post("/me/phone/verify", requireAuth, phone.confirmMyPhoneVerification);
+playersRouter.delete("/me/phone", requireAuth, phone.removeMyPhoneNumber);
 
 export const adminPlayersRouter = Router();
 adminPlayersRouter.patch("/:id/points", requireAuth, requireAdmin, players.adjustPoints);

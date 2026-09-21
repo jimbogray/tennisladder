@@ -15,6 +15,8 @@
 #   ACS_CONNECTION_STRING  Enables outbound email. Leave unset for staging so it can't email
 #                          real people.
 #   EMAIL_FROM_ADDRESS     Sender address; defaults to ladder@<domain>.
+#   SMS_FROM_NUMBER        E.164 number provisioned on the ACS resource, for confirmation
+#                          code texts. Optional; without it the API sends no SMS.
 #   GOOGLE_CLIENT_ID       Enables Google sign-in, both needed together. From an OAuth 2.0 Web
 #   GOOGLE_CLIENT_SECRET   client in Google Cloud Console, with this environment's callback
 #                          registered as an authorized redirect URI (printed at the end of a run).
@@ -203,6 +205,11 @@ ENV_VARS=(
 if has_secret acs-connection || [ -n "${ACS_CONNECTION_STRING:-}" ]; then
   ENV_VARS+=("AZURE_COMMUNICATION_CONNECTION_STRING=secretref:acs-connection")
   ENV_VARS+=("EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-ladder@${DOMAIN}}")
+  # Texting confirmation codes needs a number provisioned on the same ACS resource, which email
+  # doesn't, so it's set only where one exists — the API leaves SMS off without it.
+  if [ -n "${SMS_FROM_NUMBER:-}" ]; then
+    ENV_VARS+=("SMS_FROM_NUMBER=${SMS_FROM_NUMBER}")
+  fi
 fi
 # Derived rather than configured: Google compares the callback character for character against the
 # registered redirect URI, so building it from API_HOST removes a way to get it subtly wrong.
