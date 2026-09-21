@@ -1,6 +1,7 @@
 import type {
   ConfirmPhoneVerificationRequest,
   LadderEntryDto,
+  PlayerDataExportDto,
   PublicUserDto,
   SessionUserDto,
   StartPhoneVerificationDto,
@@ -49,4 +50,9 @@ export function adjustPlayerPoints(userId: string, newPoints: number, reason?: s
     method: "PATCH",
     body: JSON.stringify({ newPoints, reason }),
   });
+}
+
+/** Everything the app holds about you, for the download button on your profile. */
+export function fetchMyDataExport() {
+  return apiFetch<PlayerDataExportDto>("/players/me/data");
 }

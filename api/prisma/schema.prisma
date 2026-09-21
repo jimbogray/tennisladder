@@ -88,6 +88,13 @@ model User {
   // in and is left out of the team, the ladder and the challenge picker.
   removedAt DateTime?
 
+  // Set when an admin erases the personal data on this row (playerDataService.erasePersonalData).
+  // Distinct from `removedAt`, which only hides someone: this one records that the name, email,
+  // rating, phone number, saved places and anything they typed are gone for good, and that what's
+  // left is a placeholder holding completed matches together. Also what makes erasure idempotent
+  // and keeps an already-erased row out of the team list.
+  personalDataErasedAt DateTime?
+
   registrationCodeId String?           @unique
   registrationCode   RegistrationCode? @relation(fields: [registrationCodeId], references: [id])
 

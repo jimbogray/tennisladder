@@ -10,6 +10,7 @@ playersRouter.get("/", requireAuth, players.listLadder);
 playersRouter.get("/challengeable", requireAuth, players.listChallengeable);
 playersRouter.get("/me", requireAuth, players.me);
 playersRouter.patch("/me", requireAuth, players.updateMe);
+playersRouter.get("/me/data", requireAuth, players.exportMyData);
 playersRouter.get("/me/addresses", requireAuth, addresses.listMyAddresses);
 playersRouter.post("/me/addresses", requireAuth, addresses.createMyAddress);
 playersRouter.delete("/me/addresses/:id", requireAuth, addresses.deleteMyAddress);

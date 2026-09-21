@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { USTA_RATINGS, type UstaRating } from "@tennisladder/shared";
-import { updateMyProfile } from "../api/players.js";
+import { fetchMyDataExport, updateMyProfile } from "../api/players.js";
 import { createAddress, deleteAddress, fetchMyAddresses } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
 import { SavedAddressForm } from "../components/SavedAddressForm.js";
@@ -59,6 +60,59 @@ function AddressesSection() {
           />
         </>
       )}
+    </section>
+  );
+}
+
+/**
+ * What the app holds about this player, and what they can do about it.
+ *
+ * The download is built in the browser from the JSON the API returns, because the request needs
+ * the bearer token and a plain <a href> can't carry one.
+ */
+function YourDataSection() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDownload() {
+    setError(null);
+    setBusy(true);
+    try {
+      const data = await fetchMyDataExport();
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `tennis-ladder-data-${data.exportedAt.slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Couldn't prepare your data. Please try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="profile-data">
+      <h2>Your data</h2>
+      <p className="profile-section-hint">
+        Download everything the ladder holds about you: your account, your saved places, your
+        matches and anything you've typed while arranging them. Our{" "}
+        <Link to="/privacy">Privacy Policy</Link> explains how long we keep it.
+      </p>
+      {error && <p role="alert">{error}</p>}
+      <button type="button" className="button-secondary" disabled={busy} onClick={handleDownload}>
+        {busy ? "Preparing…" : "Download a copy of your data"}
+      </button>
+      <p className="profile-section-hint">
+        To have your details removed entirely, ask a club admin. Your name on matches already played
+        is replaced with a placeholder so the other player's history stays intact; everything else
+        goes, and it can't be undone.
+      </p>
     </section>
   );
 }
@@ -190,6 +244,8 @@ export function ProfilePage() {
           <PhoneNumberSection phoneNumber={user.phoneNumber} onChange={updateUser} /> */}
 
       <AddressesSection />
+
+      <YourDataSection />
     </div>
   );
 }
