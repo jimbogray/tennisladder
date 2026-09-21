@@ -180,9 +180,10 @@ model RegistrationCode {
   createdAt DateTime @default(now())
   expiresAt DateTime
 
-  // Active-code uniqueness (used_at IS NULL) is enforced by a hand-added partial unique index
+  // Active-code uniqueness ("usedAt" IS NULL) is enforced by a hand-added partial unique index
   // in a migration — see prisma/migrations/*_registration_code_active_unique/migration.sql.
-  // Prisma schema syntax has no WHERE clause support for @@unique.
+  // Prisma schema syntax has no WHERE clause support for @@unique, so `code` is left unconstrained
+  // here; `prisma migrate diff` against this schema will not see the index.
 
   @@map("registration_codes")
 }
