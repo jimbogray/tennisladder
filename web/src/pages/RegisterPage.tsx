@@ -20,7 +20,9 @@ export function RegisterPage() {
     ustaRating: "",
     // "" is the initials badge, which is what an account gets if they skip the picker.
     avatarId: "" as AvatarId | "",
-    registrationCode: (searchParams.get("code") ?? "").replace(/\D/g, "").slice(0, 4),
+    // Codes are 6 digits; slicing to 4 here (as this did when they were 4) silently handed the
+    // recipient of an invite link a code two digits short.
+    registrationCode: (searchParams.get("code") ?? "").replace(/\D/g, "").slice(0, 6),
   });
   // Held locally until the account exists; saved along with it.
   const [addresses, setAddresses] = useState<CreateUserAddressRequest[]>([]);

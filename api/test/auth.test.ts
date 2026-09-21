@@ -50,6 +50,47 @@ describe("registering with an invite code", () => {
     assert.notEqual(code.usedAt, null);
   });
 
+  it("registers without a rating, which the form sends as an empty string", async () => {
+    const admin = await createUser({ role: "ADMIN" });
+    await createRegistrationCode(admin.id, { code: "202020" });
+    const client = apiClient();
+
+    const response = await client.post("/api/auth/register", {
+      firstName: "Ola",
+      lastName: "Berg",
+      email: "ola@example.test",
+      password: PASSWORD,
+      // The "No rating" option, which used to reach a Decimal column and 500.
+      ustaRating: "",
+      registrationCode: "202020",
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.user.ustaRating, null);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: "ola@example.test" } });
+    assert.equal(user.ustaRating, null);
+  });
+
+  it("refuses a rating that isn't on the NTRP scale, leaving the code unspent", async () => {
+    const admin = await createUser({ role: "ADMIN" });
+    await createRegistrationCode(admin.id, { code: "212121" });
+    const client = apiClient();
+
+    const response = await client.post("/api/auth/register", {
+      firstName: "Ola",
+      lastName: "Berg",
+      email: "ola@example.test",
+      password: PASSWORD,
+      ustaRating: "eleven",
+      registrationCode: "212121",
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(await prisma.user.count({ where: { email: "ola@example.test" } }), 0);
+    const code = await prisma.registrationCode.findFirstOrThrow({ where: { code: "212121" } });
+    assert.equal(code.usedAt, null);
+  });
+
   it("refuses an unknown code without creating an account", async () => {
     const client = apiClient();
 

@@ -76,6 +76,35 @@ export function accountTypeFor(user: { role: UserRole; participatesInLadder: boo
 /** Thrown when a registration code can't be redeemed. Callers should surface this as a 400. */
 export class RegistrationCodeError extends Error {}
 
+async function redeemWithin(
+  tx: Prisma.TransactionClient,
+  code: string,
+  redeemingEmail: string,
+) {
+  const existing = await tx.registrationCode.findFirst({
+    where: { code, usedAt: null },
+  });
+  if (!existing) {
+    throw new RegistrationCodeError("Invalid or already-used registration code");
+  }
+  if (existing.expiresAt <= new Date()) {
+    throw new RegistrationCodeError("Registration code has expired");
+  }
+  // invitedEmail is stored lowercased when the invite is issued; normalize both sides anyway.
+  if (
+    existing.invitedEmail &&
+    existing.invitedEmail.toLowerCase() !== redeemingEmail.trim().toLowerCase()
+  ) {
+    throw new RegistrationCodeError(
+      "This invite was sent to a different email address. Sign up with the address your club admin invited, or ask them for a new code.",
+    );
+  }
+  return tx.registrationCode.update({
+    where: { id: existing.id },
+    data: { usedAt: new Date() },
+  });
+}
+
 /**
  * Atomically redeems an active registration code: looks it up by value (usedAt IS NULL), verifies
  * it hasn't expired, checks it against the email redeeming it, marks it used, and returns it.
@@ -86,30 +115,17 @@ export class RegistrationCodeError extends Error {}
  * generated for manual handout have no invitedEmail and stay redeemable by anyone holding them.
  * The check runs inside the transaction so a mismatch leaves the code unused and still redeemable
  * by its intended recipient.
+ *
+ * Pass `tx` to redeem inside a caller's transaction. Redemption and whatever the code buys — the
+ * new user row, the account type written onto an existing one — have to commit or roll back
+ * together, or a failure after this point burns the invite and leaves the person holding a code
+ * that no longer works.
  */
-export async function redeemRegistrationCode(code: string, redeemingEmail: string) {
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.registrationCode.findFirst({
-      where: { code, usedAt: null },
-    });
-    if (!existing) {
-      throw new RegistrationCodeError("Invalid or already-used registration code");
-    }
-    if (existing.expiresAt <= new Date()) {
-      throw new RegistrationCodeError("Registration code has expired");
-    }
-    // invitedEmail is stored lowercased when the invite is issued; normalize both sides anyway.
-    if (
-      existing.invitedEmail &&
-      existing.invitedEmail.toLowerCase() !== redeemingEmail.trim().toLowerCase()
-    ) {
-      throw new RegistrationCodeError(
-        "This invite was sent to a different email address. Sign up with the address your club admin invited, or ask them for a new code.",
-      );
-    }
-    return tx.registrationCode.update({
-      where: { id: existing.id },
-      data: { usedAt: new Date() },
-    });
-  });
+export async function redeemRegistrationCode(
+  code: string,
+  redeemingEmail: string,
+  tx?: Prisma.TransactionClient,
+) {
+  if (tx) return redeemWithin(tx, code, redeemingEmail);
+  return prisma.$transaction((ownTx) => redeemWithin(ownTx, code, redeemingEmail));
 }

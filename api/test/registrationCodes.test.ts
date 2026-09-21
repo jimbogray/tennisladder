@@ -104,6 +104,41 @@ describe("an invite bound to one email address", () => {
   });
 });
 
+describe("redeeming inside a caller's transaction", () => {
+  it("leaves the code unused when the caller's transaction rolls back", async () => {
+    const admin = await createUser({ role: "ADMIN" });
+    await createRegistrationCode(admin.id, { code: "121212" });
+
+    // What registration does: redeem, then write the account. If the write fails, the invite has
+    // to come back, or its holder is left with a code that no longer works and no account.
+    await assert.rejects(
+      prisma.$transaction(async (tx) => {
+        await redeemRegistrationCode("121212", "rolled.back@example.test", tx);
+        throw new Error("the account write failed");
+      }),
+      /the account write failed/,
+    );
+
+    const code = await prisma.registrationCode.findFirstOrThrow({ where: { code: "121212" } });
+    assert.equal(code.usedAt, null);
+    // And it's still redeemable, not merely unmarked.
+    const redeemed = await redeemRegistrationCode("121212", "rolled.back@example.test");
+    assert.notEqual(redeemed.usedAt, null);
+  });
+
+  it("marks the code used when the caller's transaction commits", async () => {
+    const admin = await createUser({ role: "ADMIN" });
+    await createRegistrationCode(admin.id, { code: "131313" });
+
+    await prisma.$transaction(async (tx) => {
+      await redeemRegistrationCode("131313", "committed@example.test", tx);
+    });
+
+    const code = await prisma.registrationCode.findFirstOrThrow({ where: { code: "131313" } });
+    assert.notEqual(code.usedAt, null);
+  });
+});
+
 describe("active-code uniqueness", () => {
   it("is enforced by the partial unique index, so two active codes can't share a value", async () => {
     const admin = await createUser({ role: "ADMIN" });

@@ -70,7 +70,14 @@ const registerSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Enter a valid email address"),
   password: passwordSchema,
-  ustaRating: z.string().optional(),
+  // The select's "no rating" option posts "", and anything off the NTRP scale would be handed
+  // straight to a Decimal(2,1) column that throws on it — so it's rejected here instead. Same
+  // shape as completeProfileSchema below, which is the other way an account gets a rating.
+  ustaRating: z
+    .union([z.enum(USTA_RATINGS), z.literal(""), z.null()], {
+      errorMap: () => ({ message: "Choose a USTA rating from the list" }),
+    })
+    .optional(),
   // One of the predefined portraits, or "" for the initials badge — the same shape
   // PATCH /api/players/me takes, so the register form and the profile form can share a picker.
   avatarId: z.union([z.enum(AVATAR_IDS), z.literal("")]).optional(),
@@ -93,9 +100,43 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   // the browser to give up shouldn't leave a registration code spent on an account never created.
   const addressRows = data.addresses?.length ? await geocodeNewUserAddresses(data.addresses) : [];
 
-  let code;
+  // Hashing before the transaction: bcrypt is deliberately slow, and holding a transaction open
+  // across it would keep the code's row locked for no reason.
+  const passwordHash = await hashPassword(data.password);
+
+  let user;
   try {
-    code = await redeemRegistrationCode(data.registrationCode, email);
+    // One transaction, so a failure creating the account puts the code back: otherwise the
+    // registrant is left holding an invite that's been spent on a user who doesn't exist.
+    user = await prisma.$transaction(async (tx) => {
+      const code = await redeemRegistrationCode(data.registrationCode, email, tx);
+
+      // The invite, not the registrant, decides whether the account is a player, an admin, or both.
+      const { role, participatesInLadder } = accountFieldsFor(code.accountType);
+
+      return tx.user.create({
+        data: {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email,
+          passwordHash,
+          // A rating only means something for someone on the ladder.
+          ustaRating: participatesInLadder ? (data.ustaRating || null) : null,
+          // Unlike a rating, a portrait isn't a ladder concept, so coach-admins get one too.
+          avatarId: data.avatarId || null,
+          role,
+          participatesInLadder,
+          registrationCodeId: code.id,
+          // Redeeming a code is what "finished signing up" means; only Google-first accounts
+          // arrive without one and have to come back through POST /auth/complete-profile.
+          profileCompletedAt: new Date(),
+          // Geocoded first: only a label and coordinates are stored, never the address itself
+          // (addressService). Anything the map can't place is quietly left out rather than failing
+          // the registration — see geocodeNewUserAddresses.
+          addresses: addressRows.length ? { create: addressRows } : undefined,
+        },
+      });
+    });
   } catch (err) {
     if (err instanceof RegistrationCodeError) {
       res.status(400).json({ error: err.message });
@@ -103,32 +144,6 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     }
     throw err;
   }
-
-  // The invite, not the registrant, decides whether the account is a player, an admin, or both.
-  const { role, participatesInLadder } = accountFieldsFor(code.accountType);
-
-  const user = await prisma.user.create({
-    data: {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      email,
-      passwordHash: await hashPassword(data.password),
-      // A rating only means something for someone on the ladder.
-      ustaRating: participatesInLadder ? (data.ustaRating ?? null) : null,
-      // Unlike a rating, a portrait isn't a ladder concept, so coach-admins get one too.
-      avatarId: data.avatarId || null,
-      role,
-      participatesInLadder,
-      registrationCodeId: code.id,
-      // Redeeming a code is what "finished signing up" means; only Google-first accounts arrive
-      // without one and have to come back through POST /auth/complete-profile.
-      profileCompletedAt: new Date(),
-      // Geocoded first: only a label and coordinates are stored, never the address itself
-      // (addressService). Anything the map can't place is quietly left out rather than failing
-      // the registration — see geocodeNewUserAddresses.
-      addresses: addressRows.length ? { create: addressRows } : undefined,
-    },
-  });
 
   await issueSession(res, user);
 });
@@ -301,9 +316,26 @@ export const completeProfile = asyncHandler(async (req: Request, res: Response) 
     return;
   }
 
-  let code;
+  let user;
   try {
-    code = await redeemRegistrationCode(registrationCode, existing.email);
+    // Same transaction rule as registration: if writing the account type fails, the code stays
+    // redeemable rather than being spent on a profile that never got completed.
+    user = await prisma.$transaction(async (tx) => {
+      const code = await redeemRegistrationCode(registrationCode, existing.email, tx);
+      const { role, participatesInLadder } = accountFieldsFor(code.accountType);
+
+      return tx.user.update({
+        where: { id: existing.id },
+        data: {
+          role,
+          participatesInLadder,
+          // A rating only means something for someone on the ladder — same rule as registration.
+          ustaRating: participatesInLadder ? (ustaRating || null) : null,
+          registrationCodeId: code.id,
+          profileCompletedAt: new Date(),
+        },
+      });
+    });
   } catch (err) {
     if (err instanceof RegistrationCodeError) {
       res.status(400).json({ error: err.message });
@@ -311,19 +343,6 @@ export const completeProfile = asyncHandler(async (req: Request, res: Response) 
     }
     throw err;
   }
-
-  const { role, participatesInLadder } = accountFieldsFor(code.accountType);
-  const user = await prisma.user.update({
-    where: { id: existing.id },
-    data: {
-      role,
-      participatesInLadder,
-      // A rating only means something for someone on the ladder — same rule as registration.
-      ustaRating: participatesInLadder ? (ustaRating || null) : null,
-      registrationCodeId: code.id,
-      profileCompletedAt: new Date(),
-    },
-  });
 
   res.json({ user: toSessionUserDto(user), accessToken: accessTokenFor(user) });
 });
