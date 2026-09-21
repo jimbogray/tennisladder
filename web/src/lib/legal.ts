@@ -10,7 +10,7 @@ export const LEGAL = {
   /** The name these documents are made in — the club or entity that runs the ladder. */
   OPERATOR: "Playmore Tennis",
   /** Where questions about either document go. */
-  CONTACT_EMAIL: "ladder@playmore.tennis",
+  CONTACT_EMAIL: "support@playmore.tennis",
   /** US state whose law governs the terms. */
   GOVERNING_LAW: "the State of New York",
   /** Shown on both pages, and what a reviewer checks against the version they were sent. */
