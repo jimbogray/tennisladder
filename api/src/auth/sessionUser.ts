@@ -18,6 +18,8 @@ export function toSessionUserDto(user: SessionUser): SessionUserDto {
     // ladder's rendering and the rating options on the profile form.
     ustaRating: user.ustaRating?.toFixed(1) ?? null,
     profileCompletedAt: user.profileCompletedAt?.toISOString() ?? null,
+    // Non-null only once a texted code confirmed it, so this doubles as "phone verified".
+    phoneNumber: user.phoneNumber,
     createdAt: user.createdAt.toISOString(),
   };
 }

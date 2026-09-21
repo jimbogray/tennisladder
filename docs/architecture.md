@@ -34,7 +34,7 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 
 ## Database Schema (Prisma) — core models
 
-- **User**: id, firstName, lastName, email (unique), passwordHash?, googleId? (unique), ustaRating? (Decimal 2,1, nullable — required for Players, null for coach-admins), role (PLAYER|ADMIN), participatesInLadder (Boolean, default true — false for coach-admins; drives ladder visibility and challenge eligibility), points (default 0, unused/always 0 for non-participants), registrationCodeId, emailVerifiedAt?, profileCompletedAt? (for Google-first signups needing USTA rating + code), removedAt? (soft delete when an admin removes the user from the team — the row stays so match history keeps its references; removed users can't sign in and are excluded from the team list, ladder and challenge picker).
+- **User**: id, firstName, lastName, email (unique), phoneNumber? (E.164 notification number — see Phone Numbers below; non-null *is* the verified state, so there's no second flag to drift), passwordHash?, googleId? (unique), ustaRating? (Decimal 2,1, nullable — required for Players, null for coach-admins), role (PLAYER|ADMIN), participatesInLadder (Boolean, default true — false for coach-admins; drives ladder visibility and challenge eligibility), points (default 0, unused/always 0 for non-participants), registrationCodeId, emailVerifiedAt?, profileCompletedAt? (for Google-first signups needing USTA rating + code), removedAt? (soft delete when an admin removes the user from the team — the row stays so match history keeps its references; removed users can't sign in and are excluded from the team list, ladder and challenge picker).
 - **RegistrationCode**: id, code (6-digit string), createdByAdminId, invitedEmail? (set when issued by email; enforced at redemption, so only that address can use the code), usedAt?, createdAt, expiresAt (createdAt + 48h). Active-code uniqueness enforced via a **raw-SQL partial unique index** (`WHERE used_at IS NULL`) added in a hand-edited migration, since Prisma schema syntax has no `WHERE` clause for `@@unique`. Expiry checked at redemption time, not via the index.
 - **Location**: id, name (unique), address?, archivedAt? (soft delete to preserve historical match references), latitude?/longitude?/geocodedAddress? (geocoding cache for the weather forecast and driving times — see below).
 - **Match**: id, challengerId, opponentId, status (enum, see below), proposedDateTime (DateTime), proposedLocationId, proposedComment?, awaitingResponseFromUserId, scheduledDateTime?, resultReportedByUserId?, winnerId?, loserId?, pointsAwarded?, resultConfirmedAt?, isAdminOverride, reminderSentAt? / staleResultReminderSentAt? (job idempotency flags).
@@ -43,6 +43,7 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 - **RefreshToken**: id, userId, tokenHash (unique, store hash not raw), expiresAt, revokedAt?.
 - **PointsAdjustment**: id, userId, adjustedByAdminId, previousPoints, newPoints, reason? — audit trail for admin manual point overrides.
 - **PasswordResetToken**: id, userId, tokenHash (unique), expiresAt, usedAt? — supports the added password-reset flow.
+- **PhoneVerification**: id, userId, phoneNumber (the candidate, E.164), codeHash (sha256 of the six-digit code — deliberately *not* unique, unlike the token tables: six digits collide, and the code is only ever checked against the signed-in user's own newest row), attempts (capped, since six digits is cheap to guess), expiresAt, verifiedAt?. Indexed on `(userId, createdAt)`. See Phone Numbers below.
 - **UserAddress**: id, userId, label (unique per user, also compared case-insensitively), address, latitude?/longitude?/geocodedAddress? (the same lazy geocoding cache `Location` carries) — places a user travels to matches from (see Saved Addresses below).
 - **MatchTravelOrigin**: id, matchId, userId, addressId — which saved address one player is coming from for one match, unique per (match, user).
 
@@ -78,7 +79,7 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 ## API Endpoints (grouped)
 
 - **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/providers` (which sign-in methods are configured), `GET /api/auth/google` (+`/callback`), `POST /api/auth/complete-profile`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, `GET /api/auth/verify-email/:token`.
-- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name only), `GET`/`POST /api/players/me/addresses` and `DELETE /api/players/me/addresses/:id` (own saved addresses only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
+- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name only), `GET`/`POST /api/players/me/addresses` and `DELETE /api/players/me/addresses/:id` (own saved addresses only), `POST /api/players/me/phone` (texts a confirmation code), `POST /api/players/me/phone/verify` and `DELETE /api/players/me/phone` (own notification number only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
 - **Registration codes**: `POST /api/admin/registration-codes`, `GET /api/admin/registration-codes` (Admin).
 - **Team**: `GET /api/admin/users` (every registered user who hasn't been removed, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id` (Admin). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
@@ -126,6 +127,38 @@ of auth is hand-rolled — see the risk flag above.
 - **Configuration is optional.** Without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` the endpoints
   redirect back with a message and `GET /api/auth/providers` reports `google: false`, which is how
   the SPA knows to hide the button. Local dev and staging run this way.
+
+## Phone Numbers
+
+Players register a phone number for text notifications on their profile: they enter a number —
+with the country code prefilled to `+1`, since the club is North American — and a six-digit code
+arrives by text, which they type back into the page. Only then does the number attach to the
+account.
+
+- **The number isn't on `User` until it's confirmed.** The candidate sits on a `PhoneVerification`
+  row while the code is outstanding, so abandoning the flow halfway, mistyping a digit, or running
+  out of guesses all leave a number that already works untouched. `User.phoneNumber` therefore
+  needs no companion "verified" flag — a value there means a code came back.
+- **Normalized to E.164 server-side** (`phoneVerificationService.ts`). Spaces, dashes, dots and
+  brackets are discarded; the leading `+` must be there, because without it there's no telling a
+  country code from the start of a local number. A `+1` number is additionally held to ten digits,
+  since a short one would otherwise pass as some other country's shorter number and the user would
+  wait for a text that was never sent. No phone-number library — E.164 plus that one rule is
+  enough for a club, and the text itself is the real check.
+- **Codes are hashed, capped and short-lived**, the same treatment password reset tokens get: only
+  the newest code works, five wrong guesses spend it, it expires in ten minutes, and a resend is
+  refused within a minute of the last one. A send that fails deletes its row rather than expiring
+  it, so a text that never left doesn't cost the user that minute.
+- **Not unique across users.** A household can share a number, and verification already stops
+  anyone attaching one they can't receive texts on — unlike email, a phone number isn't identity
+  here.
+- **Sending goes through `smsService.ts`**, the SMS twin of `emailService.ts`, on the same Azure
+  Communication Services resource. It needs a sender number (`SMS_FROM_NUMBER`) as well as the
+  connection string, so SMS can be off while email is on; with no provider the code is logged
+  instead, under the same `LOG_EMAIL_LINKS` switch unsent email links use. A send failure throws,
+  where an email failure doesn't: the user is sitting in front of the page waiting for the code.
+- **Nothing sends notifications by text yet.** This is the registration half; the reminder and
+  negotiation jobs still email only.
 
 ## Saved Addresses
 

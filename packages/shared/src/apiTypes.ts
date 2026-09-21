@@ -23,6 +23,28 @@ export interface SessionUserDto extends PublicUserDto {
   profileCompletedAt: string | null;
   // When the account was registered, shown on the profile page.
   createdAt: string;
+  // The notification number the user registered, in E.164 (+15551234567), or null for none. Only
+  // ever set once a texted confirmation code came back, so a value here means "confirmed".
+  phoneNumber: string | null;
+}
+
+// POST /api/players/me/phone — texts a confirmation code to the number being registered.
+export interface StartPhoneVerificationRequest {
+  // E.164. The profile form assembles this from a country code (defaulting to +1) and the rest of
+  // the number; the server normalizes whatever it's given and rejects what it can't make sense of.
+  phoneNumber: string;
+}
+
+export interface StartPhoneVerificationDto {
+  // The number as the server normalized it, so the page can say exactly what it texted.
+  phoneNumber: string;
+  expiresInMinutes: number;
+}
+
+// POST /api/players/me/phone/verify — the code from that text. Answers with the updated session
+// user, whose phoneNumber is now set.
+export interface ConfirmPhoneVerificationRequest {
+  code: string;
 }
 
 export interface UpdateProfileRequest {

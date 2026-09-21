@@ -4,6 +4,7 @@ import { USTA_RATINGS, type UstaRating } from "@tennisladder/shared";
 import { updateMyProfile } from "../api/players.js";
 import { createAddress, deleteAddress, fetchMyAddresses } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
+import { PhoneNumberSection } from "../components/PhoneNumberSection.js";
 import { SavedAddressForm } from "../components/SavedAddressForm.js";
 import { SavedAddressList } from "../components/SavedAddressList.js";
 import { useAuth } from "../hooks/useAuth.js";
@@ -181,6 +182,8 @@ export function ProfilePage() {
           {saving ? "Saving…" : "Save"}
         </button>
       </form>
+
+      <PhoneNumberSection phoneNumber={user.phoneNumber} onChange={updateUser} />
 
       <AddressesSection />
     </div>

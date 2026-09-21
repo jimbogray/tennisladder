@@ -23,6 +23,7 @@
     "zod": "^3.23.8",
     "node-cron": "^3.0.3",
     "@azure/communication-email": "^1.0.0",
+    "@azure/communication-sms": "^1.1.0",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {

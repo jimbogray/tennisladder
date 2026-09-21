@@ -17,7 +17,7 @@ const client = env.azureCommunicationConnectionString
  */
 export async function sendEmail({ to, subject, html }: SendEmailInput): Promise<void> {
   if (!client) {
-    if (env.logEmailLinks) {
+    if (env.logUnsentMessages) {
       const links = extractLinks(html);
       console.info(
         `[emailService] email not configured; not sending "${subject}" to ${to}` +
