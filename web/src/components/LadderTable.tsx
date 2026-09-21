@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { LadderEntryDto } from "@tennisladder/shared";
 import { useAuth } from "../hooks/useAuth.js";
+import { Avatar } from "./Avatar.js";
 
 export function LadderTable({ entries }: { entries: LadderEntryDto[] }) {
   const { user } = useAuth();
@@ -25,8 +26,16 @@ export function LadderTable({ entries }: { entries: LadderEntryDto[] }) {
           return (
             <tr key={entry.userId} className={isCurrentUser ? "row-me" : undefined}>
               <td>
-                {name}
-                {isCurrentUser ? <span className="you-badge">you</span> : null}
+                <span className="ladder-player">
+                  <Avatar
+                    firstName={entry.firstName}
+                    lastName={entry.lastName}
+                    avatarId={entry.avatarId}
+                    size="sm"
+                  />
+                  {name}
+                  {isCurrentUser ? <span className="you-badge">you</span> : null}
+                </span>
               </td>
               <td>{entry.ustaRating ?? "—"}</td>
               <td>{entry.points}</td>

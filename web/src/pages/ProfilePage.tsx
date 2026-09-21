@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { USTA_RATINGS, type UstaRating } from "@tennisladder/shared";
+import { USTA_RATINGS, type AvatarId, type UstaRating } from "@tennisladder/shared";
 import { updateMyProfile } from "../api/players.js";
 import { createAddress, deleteAddress, fetchMyAddresses } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
+import { Avatar } from "../components/Avatar.js";
+import { AvatarPicker } from "../components/AvatarPicker.js";
 import { SavedAddressForm } from "../components/SavedAddressForm.js";
 import { SavedAddressList } from "../components/SavedAddressList.js";
 import { useAuth } from "../hooks/useAuth.js";
@@ -69,6 +71,8 @@ export function ProfilePage() {
   const [lastName, setLastName] = useState(user!.lastName);
   // "" is the "no rating yet" option; the API stores it as null.
   const [ustaRating, setUstaRating] = useState(user!.ustaRating ?? "");
+  // "" is the "use my initials" option, stored as null the same way.
+  const [avatarId, setAvatarId] = useState<AvatarId | "">(user!.avatarId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -80,7 +84,8 @@ export function ProfilePage() {
   const unchanged =
     firstName.trim() === user.firstName &&
     lastName.trim() === user.lastName &&
-    (!canSetRating || ustaRating === (user.ustaRating ?? ""));
+    (!canSetRating || ustaRating === (user.ustaRating ?? "")) &&
+    avatarId === (user.avatarId ?? "");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -92,11 +97,13 @@ export function ProfilePage() {
         firstName,
         lastName,
         ustaRating: ustaRating === "" ? null : (ustaRating as UstaRating),
+        avatarId: avatarId === "" ? null : avatarId,
       });
       updateUser(updated);
       setFirstName(updated.firstName);
       setLastName(updated.lastName);
       setUstaRating(updated.ustaRating ?? "");
+      setAvatarId(updated.avatarId ?? "");
       setSaved(true);
     } catch (err) {
       setError(
@@ -118,9 +125,17 @@ export function ProfilePage() {
       <h1>Profile</h1>
 
       <section className="profile-summary">
-        <h2>
-          {user.firstName} {user.lastName}
-        </h2>
+        <div className="profile-identity">
+          <Avatar
+            firstName={user.firstName}
+            lastName={user.lastName}
+            avatarId={user.avatarId}
+            size="lg"
+          />
+          <h2>
+            {user.firstName} {user.lastName}
+          </h2>
+        </div>
         <dl className="profile-details">
           <dt>Email</dt>
           <dd>{user.email}</dd>
@@ -177,6 +192,15 @@ export function ProfilePage() {
             </small>
           </>
         )}
+        <AvatarPicker
+          value={avatarId}
+          firstName={firstName}
+          lastName={lastName}
+          onChange={(next) => {
+            setAvatarId(next);
+            setSaved(false);
+          }}
+        />
         <button type="submit" disabled={saving || unchanged}>
           {saving ? "Saving…" : "Save"}
         </button>

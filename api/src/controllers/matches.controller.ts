@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { Prisma, MatchStatus } from "@prisma/client";
+import { toAvatarId } from "@tennisladder/shared";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import * as matchService from "../services/matchService.js";
@@ -18,13 +19,18 @@ const publicUserSelect = {
   participatesInLadder: true,
   points: true,
   ustaRating: true,
+  avatarId: true,
 } as const;
 
 type SelectedUser = Prisma.UserGetPayload<{ select: typeof publicUserSelect }>;
 
 /** Decimal doesn't survive res.json as a 1dp string on its own, so format it here. */
 function toPublicUser(user: SelectedUser) {
-  return { ...user, ustaRating: user.ustaRating?.toFixed(1) ?? null };
+  return {
+    ...user,
+    ustaRating: user.ustaRating?.toFixed(1) ?? null,
+    avatarId: toAvatarId(user.avatarId),
+  };
 }
 
 function withPublicPlayers<T extends { challenger: SelectedUser; opponent: SelectedUser }>(match: T) {

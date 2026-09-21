@@ -75,3 +75,28 @@ export const USTA_RATINGS = [
   "7.0",
 ] as const;
 export type UstaRating = (typeof USTA_RATINGS)[number];
+
+/**
+ * The ten portraits a player can pick from, stored on User.avatarId. Ids are deliberately
+ * positional rather than descriptive: the drawings differ by skin tone, hair and kit, and none of
+ * that belongs in a database value or in the name a screen reader reads out. What each one looks
+ * like lives with the artwork, in web/src/components/avatarArt.tsx.
+ */
+export const AVATAR_IDS = [
+  "avatar-1",
+  "avatar-2",
+  "avatar-3",
+  "avatar-4",
+  "avatar-5",
+  "avatar-6",
+  "avatar-7",
+  "avatar-8",
+  "avatar-9",
+  "avatar-10",
+] as const;
+export type AvatarId = (typeof AVATAR_IDS)[number];
+
+/** Narrows a stored/raw value to an AvatarId, so an unknown one falls back to initials. */
+export function toAvatarId(value: string | null | undefined): AvatarId | null {
+  return value && (AVATAR_IDS as readonly string[]).includes(value) ? (value as AvatarId) : null;
+}

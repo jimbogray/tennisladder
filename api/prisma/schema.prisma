@@ -83,6 +83,11 @@ model User {
 
   points Int @default(0)
 
+  // One of the ten predefined portraits (AVATAR_IDS in @tennisladder/shared); null means the user
+  // hasn't picked one and their initials stand in. Kept as a plain string rather than a Prisma
+  // enum so adding or retiring artwork is a shared-package change, not a migration.
+  avatarId String?
+
   // Set when an admin removes the user from the team. A soft delete: the row stays so the matches,
   // events and adjustments that reference it keep their history, but the user can no longer sign
   // in and is left out of the team, the ladder and the challenge picker.
