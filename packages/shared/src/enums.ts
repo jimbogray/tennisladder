@@ -24,12 +24,19 @@ export const MatchStatus = {
 } as const;
 export type MatchStatus = (typeof MatchStatus)[keyof typeof MatchStatus];
 
+// Kept in the order the Prisma enum declares them, which is how a drift between the two shows up
+// on sight. AMENDED, WITHDRAWN, CANCELLED and RESULT_AMENDED were missing here while the API was
+// already writing them, so MatchEventDto's type was narrower than what the API actually returns.
 export const MatchEventType = {
   PROPOSED: "PROPOSED",
+  AMENDED: "AMENDED",
   COUNTER_PROPOSED: "COUNTER_PROPOSED",
   ACCEPTED: "ACCEPTED",
   DECLINED: "DECLINED",
+  WITHDRAWN: "WITHDRAWN",
+  CANCELLED: "CANCELLED",
   RESULT_SUBMITTED: "RESULT_SUBMITTED",
+  RESULT_AMENDED: "RESULT_AMENDED",
   RESULT_CONFIRMED: "RESULT_CONFIRMED",
   RESULT_DISPUTED: "RESULT_DISPUTED",
   ADMIN_OVERRIDE_RESULT: "ADMIN_OVERRIDE_RESULT",

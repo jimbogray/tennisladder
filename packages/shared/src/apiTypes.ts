@@ -1,4 +1,5 @@
 import type {
+  AccountType,
   MatchEventType,
   MatchStatus,
   ResultOutcome,
@@ -248,4 +249,60 @@ export interface SetTravelOriginRequest {
 
 export interface SubmitResultRequest {
   outcome: ResultOutcome;
+}
+
+// Everything the app holds about one player, as they download it from their profile page.
+//
+// Shaped to be read by the person it's about rather than by the app: names and places are spelled
+// out instead of referenced by id, and `about` explains in plain words what's in the file. Nothing
+// here is derived from another player's private data — an opponent appears by the name they'd see
+// on the ladder anyway.
+export interface PlayerDataExportDto {
+  exportedAt: string;
+  about: string[];
+  account: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    ustaRating: string | null;
+    phoneNumber: string | null;
+    accountType: AccountType;
+    onTheLadder: boolean;
+    points: number;
+    emailVerifiedAt: string | null;
+    joinedAt: string;
+  };
+  // Label and coordinates: the address itself was never stored (see UserAddressDto).
+  savedPlaces: {
+    label: string;
+    latitude: number | null;
+    longitude: number | null;
+    savedAt: string;
+  }[];
+  matches: {
+    id: string;
+    status: MatchStatus;
+    opponentName: string;
+    iChallenged: boolean;
+    proposedFor: string;
+    scheduledFor: string | null;
+    location: string;
+    outcome: "won" | "lost" | "tied" | null;
+    pointsAwarded: number | null;
+    completedAt: string | null;
+  }[];
+  // Free text this player typed while arranging matches, which is the only place the app keeps
+  // anything they wrote.
+  messages: {
+    matchId: string;
+    type: MatchEventType;
+    comment: string;
+    writtenAt: string;
+  }[];
+  pointsAdjustments: {
+    previousPoints: number;
+    newPoints: number;
+    reason: string | null;
+    adjustedAt: string;
+  }[];
 }

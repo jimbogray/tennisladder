@@ -108,13 +108,49 @@ export function PrivacyPolicyPage() {
         trade it, to anyone, for any purpose.
       </p>
 
-      <h2>Keeping and deleting it</h2>
+      <h2>How long we keep it</h2>
+      <ul>
+        <li>
+          <strong>Your account</strong> — for as long as you are on the team, and after you leave
+          until you ask for it to be erased.
+        </li>
+        <li>
+          <strong>Your matches, and the messages you sent arranging them</strong> — kept with your
+          account, because they are the ladder's record and the other player's record too.
+        </li>
+        <li>
+          <strong>Your phone number</strong> — until you remove it, which deletes it straight away.
+          A number still being confirmed, and its code, are deleted within minutes.
+        </li>
+        <li>
+          <strong>Addresses you save</strong> — the address itself is never kept at all. It is
+          turned into map coordinates while you are saving it and then thrown away, and the
+          coordinates are deleted when you remove the place or your account is erased.
+        </li>
+        <li>
+          <strong>Sign-in sessions, password-reset links, invite codes and result links</strong> —
+          all short-lived and expire on their own; a reset link lasts about an hour, an invite code
+          a couple of days, and a signed-in session weeks at most. Logging out ends yours
+          immediately.
+        </li>
+      </ul>
+
+      <h2>Getting a copy, and having it erased</h2>
       <p>
-        We keep your account for as long as you are on the team. Removing your phone number on your
-        profile page deletes it immediately. If you leave the club, ask an admin to remove your
-        account: your name stays attached to matches already played, so the record other players
-        see stays intact, but you can no longer sign in. To have your details removed entirely,
-        email us at <a href={`mailto:${LEGAL.CONTACT_EMAIL}`}>{LEGAL.CONTACT_EMAIL}</a>.
+        Your profile page has a button that downloads everything we hold about you as a file, at any
+        time and without asking anyone.
+      </p>
+      <p>
+        To have it erased, ask a club admin, or email us at{" "}
+        <a href={`mailto:${LEGAL.CONTACT_EMAIL}`}>{LEGAL.CONTACT_EMAIL}</a>. Erasing deletes your
+        name, email address, rating, phone number, saved places and everything you have typed, and
+        it cannot be undone.
+      </p>
+      <p>
+        Two things survive it, and only because they are not only about you. The matches you have
+        played stay on record, with a placeholder in place of your name, so the players you played
+        against keep their own history and the ladder standings still add up. The points those
+        matches awarded stay for the same reason. Nothing in what is left identifies you.
       </p>
 
       <h2>Security</h2>

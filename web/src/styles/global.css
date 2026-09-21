@@ -1081,6 +1081,49 @@ tbody tr.row-me td:first-child {
   flex-wrap: wrap;
 }
 
+/* People already off the team, listed so their data can be erased. A list rather than more rows
+   in the table above: the actions are different, and mixing them would invite a misclick. */
+.team-removed {
+  max-width: 560px;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.team-removed h2 {
+  font-size: 1.1rem;
+}
+
+.team-removed > p {
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.team-removed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.team-removed-list > li {
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.team-removed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* The email sits under the name here, unlike in the table where it has its own column. */
+.team-removed-row .team-email-inline {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
 /* Addresses like opp-ff95979a@example.com have no natural break points. */
 .team-email,
 .team-email-inline {
@@ -1432,6 +1475,22 @@ gmp-place-autocomplete {
 
 .saved-address-list {
   margin-bottom: 1.25rem;
+}
+
+.profile-data {
+  max-width: 560px;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* The note about erasure follows the button, so it needs the gap the leading hint has above it. */
+.profile-data .profile-section-hint:last-child {
+  margin: 1.25rem 0 0;
+}
+
+.register-consent {
+  margin-top: -0.25rem;
 }
 
 .saved-address-form,

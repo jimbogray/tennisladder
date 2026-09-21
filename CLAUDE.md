@@ -26,7 +26,8 @@ npm install                        # resolves all three workspaces; postinstall 
 npm run dev:api                    # tsx watch, http://localhost:4000
 npm run dev:web                    # vite, http://localhost:5173
 npm run build                      # builds shared -> api -> web in order (shared must build first)
-npm run lint                       # tsc --noEmit for api and web (no eslint configured)
+npm run lint                       # tsc --noEmit for api, its tests, and web (no eslint configured)
+npm test                           # api test suite (node --test); needs a local Postgres, see Tests
 ```
 
 Per-workspace (from `api/` or `web/`):
@@ -45,11 +46,40 @@ ADMIN_EMAIL=... ADMIN_PASSWORD=... npx tsx scripts/create-admin.ts  # create an 
 For hosted environments, use `./infra/create-admin.sh <staging|production>` from the repo root. It
 supplies `DATABASE_URL` and temporarily opens the database firewall.
 
-**No test suite exists in this repo yet** — there is no test runner configured and no `*.test.ts`
-files. Don't assume `npm test` works.
+### Tests
 
-**No ESLint** — `lint` scripts just run `tsc --noEmit`. Type errors are the only automated
-correctness signal short of manual testing.
+```bash
+npm test                           # api suite; also runnable from api/ as npm test
+```
+
+A deliberately small `node --test` suite (no test framework dependency — `tsx` supplies the TS
+loader) over the four areas where types can't help: the match state machine, the points formula,
+auth, and registration codes. It runs in CI and a failure fails the build. It is a baseline to
+add to when a bug is found, not a coverage target — the rest of the app is still verified by
+hand.
+
+Tests live in `api/test/`, outside `rootDir`, so they never reach `dist/` or the container image;
+`api/tsconfig.test.json` is what typechecks them, and `npm run lint` runs it.
+
+**They need a real PostgreSQL**, because the invariants worth testing (points applied inside the
+completing transaction, the partial unique index on active registration codes, `MatchEvent`
+written alongside every `Match` status change) only exist in the database:
+
+```bash
+createdb tennisladder_test         # once; or set TEST_DATABASE_URL at a database of your own
+```
+
+`TEST_DATABASE_URL` defaults to `postgresql://postgres:postgres@localhost:5432/tennisladder_test`
+and is deliberately *not* read from `DATABASE_URL` — the suite truncates every table between
+tests, and a name that doesn't end in `_test` is refused outright, so a dev database can't be
+wiped by accident. `pretest` runs `prisma generate` and `prisma migrate deploy` against it.
+
+Test files run one at a time (`--test-concurrency=1`) since they share that one database. The
+rate limiters are process-wide singletons, so HTTP tests go through `apiClient()` in
+`test/helpers/http.js`, which gives each caller its own `X-Forwarded-For` and cookie jar.
+
+**No ESLint** — `lint` scripts run `tsc --noEmit` over the app and the tests. Between that and the
+suite above, anything else still needs checking by hand.
 
 ### Local environment
 
