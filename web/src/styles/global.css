@@ -904,6 +904,15 @@ tbody tr.row-me td:first-child {
   color: var(--ink-soft);
 }
 
+/* Sits under the scheduled time as a quiet aside, not an action competing with the buttons. */
+.match-detail-calendar {
+  display: block;
+  width: fit-content;
+  margin-top: 0.15rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
 @media (max-width: 30rem) {
   .match-detail {
     grid-template-columns: 1fr;

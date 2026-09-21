@@ -25,7 +25,7 @@ Auth.js does not support DB session strategy together with the Credentials provi
 /tennisladder
   package.json                # npm workspaces root
   tsconfig.base.json
-  /packages/shared             # hand-maintained enums + shared DTO types only
+  /packages/shared             # hand-maintained enums, shared DTO types, and pure helpers both sides must agree on
   /api                         # Express API
   /web                         # React (Vite) SPA
 ```
@@ -67,6 +67,16 @@ if winner.points < loser.points:  winner.points = loser.points + 1   # upset
 else:                              winner.points = winner.points + 1  # standard win
 loser.points unchanged
 ```
+
+## Calendar export
+
+A `SCHEDULED` match can be put in a player's own calendar from two places — the match page and the
+confirmation email — both of which link to Google Calendar's event template URL
+(`packages/shared/src/calendar.ts`). That URL prefills an event the player saves themselves, so
+nobody has to connect a Google account to the ladder and the API calls no calendar service. The
+event carries a UTC instant, which each calendar renders in its owner's own zone, so this is
+unaffected by `CLUB_TIMEZONE`. The ladder records no match duration, so the entry assumes 90
+minutes.
 
 ## Scheduled Jobs
 

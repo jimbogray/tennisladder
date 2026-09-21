@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PublicUserDto, ResultOutcome } from "@tennisladder/shared";
+import { googleCalendarUrlForMatch, type PublicUserDto, type ResultOutcome } from "@tennisladder/shared";
 import {
   acceptMatch,
   adminCancelMatch,
@@ -152,6 +152,19 @@ export function MatchDetailPage() {
   const travelOriginId = travelOrigin ?? defaultTravelOriginId(addresses, data.myTravelOrigin);
   // Undefined while addresses are loading leaves the saved choice untouched.
   const travelOriginAddressId = addresses ? toTravelOriginAddressId(travelOriginId) : undefined;
+  // Only a match that's actually arranged belongs in a calendar, and only its own players have
+  // any use for it there.
+  const calendarUrl =
+    isParticipant && data.status === "SCHEDULED" && data.scheduledDateTime
+      ? googleCalendarUrlForMatch({
+          challengerName: `${data.challenger.firstName} ${data.challenger.lastName}`,
+          opponentName: `${data.opponent.firstName} ${data.opponent.lastName}`,
+          scheduledDateTime: data.scheduledDateTime,
+          locationName: data.proposedLocation.name,
+          locationAddress: data.proposedLocation.address,
+          matchUrl: window.location.href,
+        })
+      : null;
   const travelOriginPicker = (
     <div className="travel-origin-field">
       <TravelOriginPicker
@@ -187,7 +200,19 @@ export function MatchDetailPage() {
         <dd>{data.opponent.ustaRating ?? "—"}</dd>
 
         <dt>{data.scheduledDateTime ? "Scheduled" : "Proposed"}</dt>
-        <dd>{formatMatchDateTime(data.scheduledDateTime ?? data.proposedDateTime)}</dd>
+        <dd>
+          {formatMatchDateTime(data.scheduledDateTime ?? data.proposedDateTime)}
+          {calendarUrl ? (
+            <a
+              className="match-detail-calendar"
+              href={calendarUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Add to Google Calendar
+            </a>
+          ) : null}
+        </dd>
 
         <dt>Location</dt>
         <dd>
