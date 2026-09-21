@@ -1,7 +1,11 @@
 import type {
+  ConfirmPhoneVerificationRequest,
   LadderEntryDto,
+  PlayerDataExportDto,
   PublicUserDto,
   SessionUserDto,
+  StartPhoneVerificationDto,
+  StartPhoneVerificationRequest,
   UpdateProfileRequest,
 } from "@tennisladder/shared";
 import { apiFetch } from "./client.js";
@@ -11,6 +15,26 @@ export function updateMyProfile(body: UpdateProfileRequest) {
     method: "PATCH",
     body: JSON.stringify(body),
   });
+}
+
+/** Texts a confirmation code to the number being registered for notifications. */
+export function startPhoneVerification(body: StartPhoneVerificationRequest) {
+  return apiFetch<StartPhoneVerificationDto>("/players/me/phone", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Confirms that code, which is what actually attaches the number to the account. */
+export function confirmPhoneVerification(body: ConfirmPhoneVerificationRequest) {
+  return apiFetch<SessionUserDto>("/players/me/phone/verify", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function removePhoneNumber() {
+  return apiFetch<SessionUserDto>("/players/me/phone", { method: "DELETE" });
 }
 
 export function fetchLadder() {
@@ -26,4 +50,9 @@ export function adjustPlayerPoints(userId: string, newPoints: number, reason?: s
     method: "PATCH",
     body: JSON.stringify({ newPoints, reason }),
   });
+}
+
+/** Everything the app holds about you, for the download button on your profile. */
+export function fetchMyDataExport() {
+  return apiFetch<PlayerDataExportDto>("/players/me/data");
 }

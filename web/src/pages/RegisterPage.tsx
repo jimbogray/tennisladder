@@ -92,7 +92,8 @@ export function RegisterPage() {
             <h2>Where do you travel from?</h2>
             <small>
               Optional. Save home, office or anywhere else you head to matches from. Only you can
-              see these, and you can change them later on your profile.
+              see these, we keep only the map location each one works out to, and you can change
+              them later on your profile.
             </small>
             <SavedAddressList
               addresses={addresses.map((a) => ({ key: a.label, ...a }))}
@@ -104,6 +105,13 @@ export function RegisterPage() {
               onAdd={(input) => setAddresses((prev) => [...prev, input])}
             />
           </div>
+          {/* Above the button that creates the account, not in a footer: this is the moment
+              someone agrees to either document, so this is where they have to be readable. Both
+              pages are public, so the links work before an account exists. */}
+          <small className="register-consent">
+            By registering you agree to our <Link to="/terms">Terms and Conditions</Link> and{" "}
+            <Link to="/privacy">Privacy Policy</Link>.
+          </small>
           <button type="submit">Register</button>
           <GoogleSignInButton label="Sign up with Google" />
           <p>

@@ -1,4 +1,5 @@
 import type {
+  AccountType,
   AvatarId,
   MatchEventType,
   MatchStatus,
@@ -26,6 +27,28 @@ export interface SessionUserDto extends PublicUserDto {
   profileCompletedAt: string | null;
   // When the account was registered, shown on the profile page.
   createdAt: string;
+  // The notification number the user registered, in E.164 (+15551234567), or null for none. Only
+  // ever set once a texted confirmation code came back, so a value here means "confirmed".
+  phoneNumber: string | null;
+}
+
+// POST /api/players/me/phone — texts a confirmation code to the number being registered.
+export interface StartPhoneVerificationRequest {
+  // E.164. The profile form assembles this from a country code (defaulting to +1) and the rest of
+  // the number; the server normalizes whatever it's given and rejects what it can't make sense of.
+  phoneNumber: string;
+}
+
+export interface StartPhoneVerificationDto {
+  // The number as the server normalized it, so the page can say exactly what it texted.
+  phoneNumber: string;
+  expiresInMinutes: number;
+}
+
+// POST /api/players/me/phone/verify — the code from that text. Answers with the updated session
+// user, whose phoneNumber is now set.
+export interface ConfirmPhoneVerificationRequest {
+  code: string;
 }
 
 export interface UpdateProfileRequest {
@@ -50,14 +73,17 @@ export interface AuthProvidersDto {
 }
 
 // A place the user travels to matches from. Only ever returned to its owner.
+//
+// No address: the postal address is geocoded while it's being saved and then discarded, so the
+// label is all there is to show. See the UserAddress model in schema.prisma.
 export interface UserAddressDto {
   id: string;
   // "Home", "Office", or a label the user typed.
   label: string;
-  address: string;
   createdAt: string;
 }
 
+// The address is sent once, on the way in, and never stored or returned.
 export interface CreateUserAddressRequest {
   label: string;
   address: string;
@@ -229,4 +255,60 @@ export interface SetTravelOriginRequest {
 
 export interface SubmitResultRequest {
   outcome: ResultOutcome;
+}
+
+// Everything the app holds about one player, as they download it from their profile page.
+//
+// Shaped to be read by the person it's about rather than by the app: names and places are spelled
+// out instead of referenced by id, and `about` explains in plain words what's in the file. Nothing
+// here is derived from another player's private data — an opponent appears by the name they'd see
+// on the ladder anyway.
+export interface PlayerDataExportDto {
+  exportedAt: string;
+  about: string[];
+  account: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    ustaRating: string | null;
+    phoneNumber: string | null;
+    accountType: AccountType;
+    onTheLadder: boolean;
+    points: number;
+    emailVerifiedAt: string | null;
+    joinedAt: string;
+  };
+  // Label and coordinates: the address itself was never stored (see UserAddressDto).
+  savedPlaces: {
+    label: string;
+    latitude: number | null;
+    longitude: number | null;
+    savedAt: string;
+  }[];
+  matches: {
+    id: string;
+    status: MatchStatus;
+    opponentName: string;
+    iChallenged: boolean;
+    proposedFor: string;
+    scheduledFor: string | null;
+    location: string;
+    outcome: "won" | "lost" | "tied" | null;
+    pointsAwarded: number | null;
+    completedAt: string | null;
+  }[];
+  // Free text this player typed while arranging matches, which is the only place the app keeps
+  // anything they wrote.
+  messages: {
+    matchId: string;
+    type: MatchEventType;
+    comment: string;
+    writtenAt: string;
+  }[];
+  pointsAdjustments: {
+    previousPoints: number;
+    newPoints: number;
+    reason: string | null;
+    adjustedAt: string;
+  }[];
 }

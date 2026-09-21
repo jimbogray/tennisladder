@@ -44,6 +44,16 @@ export interface TeamMemberDto {
   lastName: string;
   email: string;
   accountType: AccountType;
+  /** Set once they've been taken off the team; such a row is listed only so its data can be erased. */
+  removedAt: string | null;
+}
+
+/** What the erasure removed, so the page can say what happened rather than just "done". */
+export interface ErasureSummaryDto {
+  erasedAt: string;
+  savedPlacesDeleted: number;
+  messagesCleared: number;
+  matchesKept: number;
 }
 
 export function fetchTeamMembers() {
@@ -60,4 +70,12 @@ export function updateTeamMemberAccountType(id: string, accountType: AccountType
 /** Soft-removes a user: they're signed out and hidden, but their past matches are kept. */
 export function removeTeamMember(id: string) {
   return apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" });
+}
+
+/**
+ * Erases a person's personal data for good. Not the same thing as removing them, and not
+ * reversible: only call this behind a confirmation the admin has actually read.
+ */
+export function erasePersonalData(id: string) {
+  return apiFetch<ErasureSummaryDto>(`/admin/users/${id}/erase-personal-data`, { method: "POST" });
 }

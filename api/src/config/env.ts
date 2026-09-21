@@ -53,12 +53,24 @@ export const env = {
   azureCommunicationConnectionString: process.env.AZURE_COMMUNICATION_CONNECTION_STRING ?? "",
   emailFromAddress: process.env.EMAIL_FROM_ADDRESS ?? "ladder@example.com",
   /**
-   * When email isn't configured, log the links an unsent email would have carried (password reset,
-   * invite, result confirmation) so those flows can still be completed. On by default for local dev;
-   * hosted environments run with NODE_ENV=production and must opt in, which only staging does. Has
-   * no effect once email is configured, so links bound for a real inbox never reach the logs.
+   * Sender number for outbound SMS, in E.164 (+15551234567), provisioned on the same Azure
+   * Communication Services resource that sends the email. Blank leaves SMS off even when email is
+   * configured — ACS won't send from a number it doesn't own, and a deployment that never texts
+   * shouldn't have to rent one.
    */
-  logEmailLinks: process.env.LOG_EMAIL_LINKS ? process.env.LOG_EMAIL_LINKS === "true" : !isProduction,
+  smsFromNumber: process.env.SMS_FROM_NUMBER ?? "",
+  /**
+   * When a message provider isn't configured, log what the unsent message would have carried — the
+   * links in an email (password reset, invite, result confirmation) and the code in a phone
+   * verification text — so those flows can still be completed. On by default for local dev; hosted
+   * environments run with NODE_ENV=production and must opt in, which only staging does. Has no
+   * effect once the provider is configured, so nothing bound for a real inbox or handset reaches
+   * the logs.
+   *
+   * Still read from LOG_EMAIL_LINKS: the variable predates SMS and is already set on the staging
+   * container app and in infra/provision-environment.sh, so it keeps its deployed name.
+   */
+  logUnsentMessages: process.env.LOG_EMAIL_LINKS ? process.env.LOG_EMAIL_LINKS === "true" : !isProduction,
 
   /**
    * IANA zone the club plays in, used to write match times into emails. Emails are rendered on the
@@ -76,6 +88,9 @@ export const env = {
 
   registrationCodeTtlHours: Number(process.env.REGISTRATION_CODE_TTL_HOURS ?? 48),
   passwordResetTtlMinutes: Number(process.env.PASSWORD_RESET_TTL_MINUTES ?? 60),
+  // Short on purpose: the user is reading the code off their phone with the form still open, so a
+  // long window only widens the guessing period for a six-digit secret.
+  phoneVerificationTtlMinutes: Number(process.env.PHONE_VERIFICATION_TTL_MINUTES ?? 10),
   matchReminderLeadMinutes: Number(process.env.MATCH_REMINDER_LEAD_MINUTES ?? 60),
   staleResultReminderHours: Number(process.env.STALE_RESULT_REMINDER_HOURS ?? 24),
 };

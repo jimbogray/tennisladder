@@ -4,6 +4,28 @@ import { AVATAR_IDS, USTA_RATINGS, toAvatarId } from "@tennisladder/shared";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { toSessionUserDto } from "../auth/sessionUser.js";
+import { exportPersonalData } from "../services/playerDataService.js";
+
+/**
+ * A copy of everything the app holds about the signed-in player, downloaded from their profile.
+ *
+ * Pretty-printed, because the person opening it is the subject rather than a program. The
+ * attachment header is for anyone calling the API directly with a token; the SPA has to fetch this
+ * with its bearer token and save the body itself, so it names the file on its own side.
+ */
+export const exportMyData = asyncHandler(async (req: Request, res: Response) => {
+  const data = await exportPersonalData(req.user!.id);
+  // The token verified against a user row, so this can only be a row deleted mid-request.
+  if (!data) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
+
+  const stamp = data.exportedAt.slice(0, 10);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="tennis-ladder-data-${stamp}.json"`);
+  res.send(JSON.stringify(data, null, 2));
+});
 
 export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
   const players = await prisma.user.findMany({

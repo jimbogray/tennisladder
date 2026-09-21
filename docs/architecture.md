@@ -34,16 +34,17 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 
 ## Database Schema (Prisma) — core models
 
-- **User**: id, firstName, lastName, email (unique), passwordHash?, googleId? (unique), ustaRating? (Decimal 2,1, nullable — required for Players, null for coach-admins), role (PLAYER|ADMIN), participatesInLadder (Boolean, default true — false for coach-admins; drives ladder visibility and challenge eligibility), points (default 0, unused/always 0 for non-participants), avatarId? (one of the ten predefined portraits in `AVATAR_IDS`, null when the user hasn't picked one and their initials are shown instead — a plain string rather than a Prisma enum, so adding or retiring artwork is a shared-package change and not a migration; an id the client no longer knows falls back to initials), registrationCodeId, emailVerifiedAt?, profileCompletedAt? (for Google-first signups needing USTA rating + code), removedAt? (soft delete when an admin removes the user from the team — the row stays so match history keeps its references; removed users can't sign in and are excluded from the team list, ladder and challenge picker).
+- **User**: id, firstName, lastName, email (unique), phoneNumber? (E.164 notification number — see Phone Numbers below; non-null *is* the verified state, so there's no second flag to drift), passwordHash?, googleId? (unique), ustaRating? (Decimal 2,1, nullable — required for Players, null for coach-admins), role (PLAYER|ADMIN), participatesInLadder (Boolean, default true — false for coach-admins; drives ladder visibility and challenge eligibility), points (default 0, unused/always 0 for non-participants), avatarId? (one of the ten predefined portraits in `AVATAR_IDS`, null when the user hasn't picked one and their initials are shown instead — a plain string rather than a Prisma enum, so adding or retiring artwork is a shared-package change and not a migration; an id the client no longer knows falls back to initials), registrationCodeId, emailVerifiedAt?, profileCompletedAt? (for Google-first signups needing USTA rating + code), removedAt? (soft delete when an admin removes the user from the team — the row stays so match history keeps its references; removed users can't sign in and are excluded from the team list, ladder and challenge picker).
 - **RegistrationCode**: id, code (6-digit string), createdByAdminId, invitedEmail? (set when issued by email; enforced at redemption, so only that address can use the code), usedAt?, createdAt, expiresAt (createdAt + 48h). Active-code uniqueness enforced via a **raw-SQL partial unique index** (`WHERE used_at IS NULL`) added in a hand-edited migration, since Prisma schema syntax has no `WHERE` clause for `@@unique`. Expiry checked at redemption time, not via the index.
 - **Location**: id, name (unique), address?, archivedAt? (soft delete to preserve historical match references), latitude?/longitude?/geocodedAddress? (geocoding cache for the weather forecast and driving times — see below).
 - **Match**: id, challengerId, opponentId, status (enum, see below), proposedDateTime (DateTime), proposedLocationId, proposedComment?, awaitingResponseFromUserId, scheduledDateTime?, resultReportedByUserId?, winnerId?, loserId?, pointsAwarded?, resultConfirmedAt?, isAdminOverride, reminderSentAt? / staleResultReminderSentAt? (job idempotency flags).
-- **MatchEvent**: id, matchId, type (enum: PROPOSED, COUNTER_PROPOSED, ACCEPTED, DECLINED, RESULT_SUBMITTED, RESULT_CONFIRMED, RESULT_DISPUTED, ADMIN_OVERRIDE_RESULT, ADMIN_CANCELLED), actorUserId?, snapshotDateTime?/snapshotLocationId?/comment? (negotiation events), resultOutcome? (result events), createdAt. Indexed on `(matchId, createdAt)` — **this table is the chronological comment/negotiation thread**, rendered on-site and re-embedded in every notification email.
+- **MatchEvent**: id, matchId, type (enum: PROPOSED, AMENDED, COUNTER_PROPOSED, ACCEPTED, DECLINED, WITHDRAWN, CANCELLED, RESULT_SUBMITTED, RESULT_AMENDED, RESULT_CONFIRMED, RESULT_DISPUTED, ADMIN_OVERRIDE_RESULT, ADMIN_CANCELLED), actorUserId?, snapshotDateTime?/snapshotLocationId?/comment? (negotiation events), resultOutcome? (result events), createdAt. Indexed on `(matchId, createdAt)` — **this table is the chronological comment/negotiation thread**, rendered on-site and re-embedded in every notification email.
 - **MatchResultToken**: id, matchId, userId, outcome (WON|LOST), token (unique random string), usedAt?. One row per (match, user, outcome) — this is what the "I won"/"I lost" email links resolve against. All unused tokens for a match are voided the moment it reaches COMPLETED.
 - **RefreshToken**: id, userId, tokenHash (unique, store hash not raw), expiresAt, revokedAt?.
 - **PointsAdjustment**: id, userId, adjustedByAdminId, previousPoints, newPoints, reason? — audit trail for admin manual point overrides.
 - **PasswordResetToken**: id, userId, tokenHash (unique), expiresAt, usedAt? — supports the added password-reset flow.
-- **UserAddress**: id, userId, label (unique per user, also compared case-insensitively), address, latitude?/longitude?/geocodedAddress? (the same lazy geocoding cache `Location` carries) — places a user travels to matches from (see Saved Addresses below).
+- **PhoneVerification**: id, userId, phoneNumber (the candidate, E.164), codeHash (sha256 of the six-digit code — deliberately *not* unique, unlike the token tables: six digits collide, and the code is only ever checked against the signed-in user's own newest row), attempts (capped, since six digits is cheap to guess), expiresAt, verifiedAt?. Indexed on `(userId, createdAt)`. See Phone Numbers below.
+- **UserAddress**: id, userId, label (unique per user, also compared case-insensitively), latitude?/longitude? — places a user travels to matches from (see Saved Addresses below). There is deliberately no address column: the address is geocoded as the row is written and then dropped, so the coordinates are all that persist.
 - **MatchTravelOrigin**: id, matchId, userId, addressId — which saved address one player is coming from for one match, unique per (match, user).
 
 ## Match State Machine
@@ -107,9 +108,9 @@ is how to check the setting is right in a hosted environment.
 ## API Endpoints (grouped)
 
 - **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/providers` (which sign-in methods are configured), `GET /api/auth/google` (+`/callback`), `POST /api/auth/complete-profile`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, `GET /api/auth/verify-email/:token`.
-- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name, USTA rating and avatar), `GET`/`POST /api/players/me/addresses` and `DELETE /api/players/me/addresses/:id` (own saved addresses only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
+- **Players**: `GET /api/players` (ladder — filters `participatesInLadder=true`), `GET /api/players/me`, `PATCH /api/players/me` (own first/last name, USTA rating and avatar), `GET /api/players/me/data` (a copy of everything held about the caller — see Personal Data below), `GET`/`POST /api/players/me/addresses` and `DELETE /api/players/me/addresses/:id` (own saved addresses only), `POST /api/players/me/phone` (texts a confirmation code), `POST /api/players/me/phone/verify` and `DELETE /api/players/me/phone` (own notification number only), `PATCH /api/admin/players/:id/points` (Admin). A separate `GET /api/players/challengeable` (or a query param on the same endpoint) returns only `participatesInLadder=true` users for populating the "who to challenge" picker, excluding coach-admins.
 - **Registration codes**: `POST /api/admin/registration-codes`, `GET /api/admin/registration-codes` (Admin).
-- **Team**: `GET /api/admin/users` (every registered user who hasn't been removed, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id` (Admin). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
+- **Team**: `GET /api/admin/users` (every registered user whose data hasn't been erased, removed ones included and flagged with `removedAt`, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/erase-personal-data` (Admin — see Personal Data below). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
 - **Weather**: `GET /api/locations/:id/forecast[?at=<ISO>]` (Player/Admin) — a 7-day outlook, or with `at` the hours around a match time. Shown on the propose/amend/counter forms.
 - **Travel**: `GET /api/matches/:id/travel-plan` (the caller's own journey only) — when to leave for a scheduled match, shown on the match page. `GET /api/travel/departure?addressId=&locationId=&at=` answers the same question for a match that doesn't exist yet, from one of the caller's own saved addresses — shown on the propose/amend/counter forms.
@@ -121,7 +122,7 @@ is how to check the setting is right in a hosted environment.
 The match proposal forms show the forecast for the chosen location: a 7-day outlook, narrowing to the hours around the match (2 before, 3 after) once a date and time are picked.
 
 - **Providers** — both free and keyless, called server-side from `api/src/services/weatherService.ts` (geocoding via the shared `geocodingService.ts`, HTTP via `upstream.ts`), so the SPA never depends on their response shapes. Forecasts come from **Open-Meteo** (16-day horizon; the free tier is licensed for non-commercial use and requires the attribution link the UI shows — commercial use needs their paid API). Addresses are geocoded with OpenStreetMap's **Nominatim**, whose usage policy requires an identifying User-Agent, at most one request per second, and caching of results.
-- **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for both weather and a driving estimate. `UserAddress` carries the same three columns and goes through the same `geocodingService.ts` helpers.
+- **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for both weather and a driving estimate. A player's saved address is the exception to the lazy pattern: it is looked up once while being saved and the address itself is never stored (see Saved Addresses below).
 - **Forecast responses are cached in memory for 30 minutes per location**, which relies on the same single-replica assumption as the scheduled jobs (a second replica would only mean more upstream calls, not incorrect data).
 - Units are always metric in the API; the SPA converts to °F/mph for US-region locales.
 
@@ -156,14 +157,91 @@ of auth is hand-rolled — see the risk flag above.
   redirect back with a message and `GET /api/auth/providers` reports `google: false`, which is how
   the SPA knows to hide the button. Local dev and staging run this way.
 
+## Phone Numbers
+
+Players register a phone number for text notifications on their profile: they enter a number —
+with the country code prefilled to `+1`, since the club is North American — and a six-digit code
+arrives by text, which they type back into the page. Only then does the number attach to the
+account.
+
+- **The number isn't on `User` until it's confirmed.** The candidate sits on a `PhoneVerification`
+  row while the code is outstanding, so abandoning the flow halfway, mistyping a digit, or running
+  out of guesses all leave a number that already works untouched. `User.phoneNumber` therefore
+  needs no companion "verified" flag — a value there means a code came back.
+- **Normalized to E.164 server-side** (`phoneVerificationService.ts`). Spaces, dashes, dots and
+  brackets are discarded; the leading `+` must be there, because without it there's no telling a
+  country code from the start of a local number. A `+1` number is additionally held to ten digits,
+  since a short one would otherwise pass as some other country's shorter number and the user would
+  wait for a text that was never sent. No phone-number library — E.164 plus that one rule is
+  enough for a club, and the text itself is the real check.
+- **Codes are hashed, capped and short-lived**, the same treatment password reset tokens get: only
+  the newest code works, five wrong guesses spend it, it expires in ten minutes, and a resend is
+  refused within a minute of the last one. A send that fails deletes its row rather than expiring
+  it, so a text that never left doesn't cost the user that minute.
+- **Not unique across users.** A household can share a number, and verification already stops
+  anyone attaching one they can't receive texts on — unlike email, a phone number isn't identity
+  here.
+- **Sending goes through `smsService.ts`**, the SMS twin of `emailService.ts`, on the same Azure
+  Communication Services resource. It needs a sender number (`SMS_FROM_NUMBER`) as well as the
+  connection string, so SMS can be off while email is on; with no provider the code is logged
+  instead, under the same `LOG_EMAIL_LINKS` switch unsent email links use. A send failure throws,
+  where an email failure doesn't: the user is sitting in front of the page waiting for the code.
+  With neither a provider nor that log — a production deployment given no sender number — starting
+  a verification is refused outright (503), rather than answering "we've texted you" about a code
+  that went nowhere.
+- **Nothing sends notifications by text yet.** This is the registration half; the reminder and
+  negotiation jobs still email only.
+
 ## Saved Addresses
 
 Users save labelled addresses (Home, Office, or a custom label) at registration or on their profile, using the same Places autocomplete as the Locations page. When proposing, amending, countering or accepting a match, and later on a scheduled match, a player can pick which one they're coming from. Once the match is scheduled, that choice drives the departure time (see Driving Times below).
 
+- **Only the coordinates are kept.** `POST /players/me/addresses` geocodes the address before the insert and stores the label and the resulting latitude/longitude — the address itself is never written to the database, and `UserAddressDto` has no field for it. A home address is the most sensitive thing the app would otherwise hold, and nothing downstream needs it: a driving time is computed from coordinates, and the player recognises their own label. An address the map can't place is a 400 (retype it); a geocoder that's down is a 502 (try again shortly), because there is no way to accept the address and resolve it later without storing it.
+- **Registration is the lenient path.** Several addresses arrive with the account, before it exists, and are geocoded ahead of redeeming the registration code so a slow lookup can't spend a code on an account that is never created. Anything the map can't place is left out rather than failing the sign-up; the player re-adds it on their profile, where an error message can actually be shown.
 - **Private to the user.** Addresses are only reachable through `/players/me/addresses`, and a match's travel origin comes back only as `myTravelOrigin` on `GET /api/matches/:id`, always for the requesting user. Admins can't see either.
 - **Origins live in `MatchTravelOrigin`, not on `Match`.** Match rows are returned whole to both players and in the public match lists, so a column there would leak. For the same reason, choosing an origin writes no `MatchEvent`: the event thread is shown to both players and embedded in emails.
 - **Request semantics.** The propose, amend, counter and accept bodies take an optional `travelOriginAddressId`. If it's omitted, the current choice stays; `null` clears it; an id must belong to the caller. The SPA omits it while addresses are still loading, so a fast submit can't clear an earlier choice.
 - **Addresses are referenced, not copied.** Deleting an address cascades to the origins that used it, and with it the departure time worked out from it.
+
+## Personal Data: Copies and Erasure
+
+Two halves of the same question — what the app holds about one player — deliberately live in one
+module, `api/src/services/playerDataService.ts`. Whatever the export says is held is what the
+erasure has to remove, so a new personal column added to the schema and wired into only one of them
+is a bug in the other.
+
+- **The export is self-service.** `GET /api/players/me/data` returns everything held about the
+  caller, and the profile page turns it into a downloaded file. It's shaped for the person it's
+  about rather than for the app: names and courts are spelled out instead of referenced by id, and
+  an `about` array explains in plain words what's in the file and what isn't. The only thing in
+  there that isn't strictly theirs is an opponent's name on a shared match, which they already see
+  on the match itself. Built in the browser from the JSON body, because the request needs the
+  bearer token and a plain `<a href>` can't carry one.
+- **Erasure is an admin action on someone already removed**, `POST /api/admin/users/:id/erase-personal-data`,
+  offered in its own section of the admin Team page rather than beside Remove. Removal is routine
+  and undoable; this isn't, and the two shouldn't be adjacent buttons. So the flow is two steps:
+  take someone off the team, erase later if they ask. Refused for the caller's own account, while
+  the user has unfinished matches (a placeholder mid-negotiation would strand their opponent), and
+  on a row already erased. `User.personalDataErasedAt` records it, makes it idempotent, and is what
+  keeps an erased row out of the Team listing.
+- **What erasure deletes**: saved places and the match origins pointing at them, phone
+  verifications, refresh tokens, password-reset tokens and result tokens, every comment the player
+  typed (on `MatchEvent`, on a challenge they opened, and on a cancellation the event trail shows
+  was theirs), the reason on any points adjustment about them, and the invited email and admin note
+  on the registration code they redeemed. The `User` row's name, email, password hash, Google id,
+  rating and phone number are overwritten in the same transaction — one transaction because a
+  half-erased row is worse than an un-erased one, since it reads as done.
+- **What survives, and why.** The `User` row itself, as "Former member" with a unique
+  `erased-<id>@removed.invalid` address: `Match`, `MatchEvent` and `PointsAdjustment` all reference
+  it and none of them cascade, so deleting it would take the *other* player's completed matches
+  with it. Points, match rows, times, courts and results stay for the same reason — they are the
+  ladder's record and the opponent's, not only the erased player's. The privacy policy says this in
+  the same words, under "Getting a copy, and having it erased".
+- **The policies are linked where consent happens.** `/privacy` and `/terms` are public routes
+  (`SiteFooter` in the signed-in layout and on the landing page), and the registration form links
+  both immediately above the button that creates the account, since that is the moment someone
+  agrees to them. The login page carries the pair too, being outside both the layout and the
+  landing page.
 
 ## Driving Times
 
@@ -181,8 +259,10 @@ see what a time or a set of courts would cost them before offering it
   public demo server and overridable with `ROUTING_BASE_URL` for a self-hosted instance. Durations
   are cached in memory for 6 hours per rounded coordinate pair — road distances don't change, and
   the one thing that does (traffic) isn't modelled anyway.
-- **Both ends are geocoded lazily**, the player's saved address exactly like the location
-  (see Weather Forecast above), so a departure time costs no upstream calls once both are cached.
+- **Neither end usually costs an upstream call.** The location is geocoded lazily and cached (see
+  Weather Forecast above); the player's saved address was geocoded when they saved it and has
+  nothing left to look up. A saved address with null coordinates predates that change and reports
+  `ORIGIN_NOT_FOUND` until the player removes and re-adds it.
 - **A drive over 8 hours is reported as `TOO_FAR`, not as a departure time.** A club ladder's
   matches are local, so a journey that long means an address landed on the wrong continent rather
   than that anyone is really driving it — a location addressed "Flushing Meadows" geocodes to a

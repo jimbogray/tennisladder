@@ -10,6 +10,7 @@ Three environments, each with its own database:
 | Resource group | — | `tennisladder-staging-rg` | `tennisladder-prod-rg` |
 | Deployed by | you, `npm run dev:*` | every merge to `main` | promoting a commit that passed staging |
 | Email | never sends | never sends | Azure Communication Services |
+| Text messages | never sends | never sends | Azure Communication Services (needs `SMS_FROM_NUMBER`) |
 
 Hosting: **Static Web Apps** for the site, **Container Apps** for the API, **PostgreSQL Flexible
 Server** for data, all in `eastus2`. One container registry is shared by both hosted environments.
@@ -83,13 +84,14 @@ with its own managed identity.
   the other. Refresh cookies are host-only, so `api.staging.playmore.tennis` and
   `api.playmore.tennis` never see each other's.
 - **CORS** — each API accepts credentialed requests only from its own site.
-- **Email** — staging is provisioned without Communication Services, so it doesn't send email.
-  Instead, `LOG_EMAIL_LINKS=true` makes the API log each unsent email's recipient, subject and
-  links (password reset, invite, result confirmation), so those flows can still be completed:
+- **Email and text messages** — staging is provisioned without Communication Services, so it sends
+  neither. Instead, `LOG_EMAIL_LINKS=true` makes the API log what each unsent message would have
+  carried — an email's recipient, subject and links (password reset, invite, result confirmation),
+  and a text's phone-number confirmation code — so those flows can still be completed:
   `az containerapp logs show -g tennisladder-staging-rg -n tennisladder-staging-api --follow`.
-  Those links are live credentials, which is why production never sets the flag. Never copy
-  production data into staging while email is enabled there: reminder jobs would message real
-  players.
+  (The variable is named for email because it predates SMS.) Those links and codes are live
+  credentials, which is why production never sets the flag. Never copy production data into staging
+  while messaging is enabled there: reminder jobs would message real players.
 - **Search engines** — the staging deploy publishes a `robots.txt` that disallows indexing.
 
 ## Why the domain is load-bearing
@@ -283,7 +285,7 @@ az containerapp update --resource-group tennisladder-staging-rg \
 The suffix has to be one you haven't used before. In single-revision mode traffic moves to the new
 revision automatically; the old one may stay active for a few minutes before it drains.
 
-### 10. Production email
+### 10. Production email and text messages
 
 Create Communication Services, connect `playmore.tennis` as a sending domain (it adds more TXT
 records in GoDaddy), then re-run provisioning with the connection string:
@@ -291,6 +293,16 @@ records in GoDaddy), then re-run provisioning with the connection string:
 ```bash
 ACS_CONNECTION_STRING='<connection string>' EMAIL_FROM_ADDRESS='ladder@playmore.tennis' \
   ./infra/provision-environment.sh production
+```
+
+Texting phone-number confirmation codes needs one thing more: a number provisioned on that same
+Communication Services resource, passed as `SMS_FROM_NUMBER` (E.164). Numbers cost money and email
+doesn't need one, so it's separate — without it the API sends no texts and the profile page's
+phone-number section can't complete. Add it to the same command once you have a number:
+
+```bash
+ACS_CONNECTION_STRING='<connection string>' EMAIL_FROM_ADDRESS='ladder@playmore.tennis' \
+  SMS_FROM_NUMBER='+15551234567' ./infra/provision-environment.sh production
 ```
 
 ---

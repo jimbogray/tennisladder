@@ -21,6 +21,8 @@ export function toSessionUserDto(user: SessionUser): SessionUserDto {
     // fall back to their initials, not render as a missing portrait.
     avatarId: toAvatarId(user.avatarId),
     profileCompletedAt: user.profileCompletedAt?.toISOString() ?? null,
+    // Non-null only once a texted code confirmed it, so this doubles as "phone verified".
+    phoneNumber: user.phoneNumber,
     createdAt: user.createdAt.toISOString(),
   };
 }

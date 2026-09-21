@@ -45,8 +45,8 @@ export function TravelOriginPicker({
       <label htmlFor={id}>Coming from</label>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)} aria-describedby={`${id}-hint`}>
         <option value="">Not specified</option>
-        {/* Label only, never the street address: (userId, label) is unique, so it still tells
-            them apart, and a full home address doesn't belong on a match form. */}
+        {/* The label is all there is: the server keeps coordinates, not the address. (userId,
+            label) is unique, so it still tells a player's saved places apart. */}
         {addresses.map((address) => (
           <option key={address.id} value={address.id}>
             {address.label}

@@ -93,11 +93,26 @@ model User {
   // in and is left out of the team, the ladder and the challenge picker.
   removedAt DateTime?
 
+  // Set when an admin erases the personal data on this row (playerDataService.erasePersonalData).
+  // Distinct from `removedAt`, which only hides someone: this one records that the name, email,
+  // rating, phone number, saved places and anything they typed are gone for good, and that what's
+  // left is a placeholder holding completed matches together. Also what makes erasure idempotent
+  // and keeps an already-erased row out of the team list.
+  personalDataErasedAt DateTime?
+
   registrationCodeId String?           @unique
   registrationCode   RegistrationCode? @relation(fields: [registrationCodeId], references: [id])
 
   emailVerifiedAt    DateTime?
   profileCompletedAt DateTime?
+
+  // The user's notification number in E.164 (+15551234567). Null means none registered. A number
+  // only lands here once a texted code has been confirmed, so this column *is* the verified state
+  // — there's no second flag that could drift out of step with it. A number still being confirmed
+  // sits on PhoneVerification instead, so an abandoned or mistyped change can't clobber one that
+  // already works. Not unique: a household can share a number, and verification already stops
+  // anyone attaching a number they can't receive texts on.
+  phoneNumber String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -113,8 +128,37 @@ model User {
   registrationCodesCreated RegistrationCode[] @relation("RegistrationCodeCreator")
   addresses                UserAddress[]
   matchTravelOrigins       MatchTravelOrigin[]
+  phoneVerifications       PhoneVerification[]
 
   @@map("users")
+}
+
+// A texted confirmation code for a phone number a user is registering for notifications. The
+// candidate number lives here, not on User, until the code comes back — see User.phoneNumber.
+model PhoneVerification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The candidate number, normalized to E.164 before it's stored.
+  phoneNumber String
+
+  // sha256 of the six-digit code, never the code itself — the same treatment password reset
+  // tokens get. Deliberately not unique: six digits collide across users, and this code is only
+  // ever checked against the signed-in user's own newest row, so it's a second factor on their
+  // session rather than a credential that stands on its own.
+  codeHash String
+
+  // Six digits is cheap to guess in bulk, so a row is spent after a handful of wrong tries
+  // instead of staying open until it expires.
+  attempts Int @default(0)
+
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("phone_verifications")
 }
 
 // A place the user travels to matches from (home, office, …), kept for driving directions and
@@ -125,19 +169,18 @@ model UserAddress {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // "Home", "Office", or whatever the user typed. Unique per user so a picker never shows two
-  // identical choices; the API also compares case-insensitively.
-  label   String
-  // Free-text postal address, normally filled in from Google Places autocomplete.
-  address String
+  // identical choices; the API also compares case-insensitively. The only thing about this row
+  // the user ever sees again, so it has to tell their addresses apart on its own.
+  label String
 
-  // Geocoding cache for driving directions, filled lazily on the first travel-plan request — the
-  // same lazy pattern Location uses for the weather forecast. `geocodedAddress` is the address the
-  // coordinates were looked up from: when it no longer matches `address` the cache is stale.
-  // Coordinates are null (with `geocodedAddress` set) when the lookup found nothing, so an
-  // unfindable address isn't retried on every request.
-  latitude        Float?
-  longitude       Float?
-  geocodedAddress String?
+  // Where the address is, and deliberately all we keep of it. The postal address is geocoded
+  // while the row is being saved and then discarded — it is never written to this table, so a
+  // player's home address can't be read back out of the database by anyone, us included.
+  //
+  // Nullable only because rows saved before that change have no coordinates and their address
+  // column is gone. Such a row can't plan a journey; the player is told to remove and re-add it.
+  latitude  Float?
+  longitude Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
