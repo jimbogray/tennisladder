@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import type { SessionUserDto } from "@tennisladder/shared";
 import {
   confirmPhoneVerification,
@@ -7,6 +8,7 @@ import {
 } from "../api/players.js";
 import { ApiError } from "../api/client.js";
 import { formatPhoneNumber } from "../lib/phone.js";
+import { SMS_PROGRAM } from "../lib/legal.js";
 
 /** The club is North American, so the country code starts here and is edited only when it isn't. */
 const DEFAULT_COUNTRY_CODE = "+1";
@@ -113,6 +115,15 @@ export function PhoneNumberSection({ phoneNumber, onChange }: PhoneNumberSection
       <p className="profile-section-hint">
         For match notifications by text. We'll send a code to confirm the number is yours. Only you
         can see it.
+      </p>
+      {/* The consent disclosure carriers want to see at the point a number is collected, and the
+          screenshot the toll-free verification application is submitted with. What it says has to
+          match the Terms and the Privacy Policy, so all three read from lib/legal.ts. */}
+      <p className="profile-phone-consent">
+        By adding a number you agree to receive {SMS_PROGRAM.DESCRIPTION}.{" "}
+        {SMS_PROGRAM.FREQUENCY} {SMS_PROGRAM.RATES} {SMS_PROGRAM.OPT_OUT} {SMS_PROGRAM.HELP} See
+        our <Link to="/terms">Terms</Link> and <Link to="/privacy">Privacy Policy</Link>. We never
+        share your number for marketing.
       </p>
       {error && <p role="alert">{error}</p>}
       {status && <p role="status">{status}</p>}

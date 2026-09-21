@@ -21,6 +21,8 @@ import { ForgotPasswordPage } from "./pages/ForgotPasswordPage.js";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage.js";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage.js";
 import { ResultConfirmPage } from "./pages/ResultConfirmPage.js";
+import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage.js";
+import { TermsPage } from "./pages/TermsPage.js";
 import { NotFoundPage } from "./pages/NotFoundPage.js";
 
 export function App() {
@@ -33,6 +35,11 @@ export function App() {
       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
       <Route path="/results/confirm/:token" element={<ResultConfirmPage />} />
+
+      {/* Public and unauthenticated on purpose: a carrier reviewing our messaging application
+          opens these URLs directly, without an account. */}
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
 
       <Route
         path="/complete-profile"

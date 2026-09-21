@@ -1279,6 +1279,74 @@ gmp-place-autocomplete {
   margin: 0;
 }
 
+/* Privacy policy and terms. Long-form prose, so it's narrower than a data page and the
+   headings carry more space than elsewhere. */
+
+.legal-page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 3rem;
+}
+
+.legal-page h2 {
+  margin: 2rem 0 0.6rem;
+  font-size: 1.15rem;
+}
+
+.legal-page p,
+.legal-page li {
+  line-height: 1.65;
+}
+
+.legal-page ul {
+  padding-left: 1.25rem;
+}
+
+.legal-page li {
+  margin-bottom: 0.5rem;
+}
+
+.legal-updated {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin-top: -0.5rem;
+}
+
+.legal-footer-links {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1.25rem 2rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.site-footer a {
+  color: var(--ink-soft);
+}
+
+.site-footer-operator {
+  white-space: nowrap;
+}
+
+/* The SMS consent disclosure beside the phone field. Small, but it can't be hidden or greyed
+   past legibility — a carrier reviews a screenshot of it. */
+.profile-phone-consent {
+  margin: -0.5rem 0 1.25rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
 /* Registering a phone number for text notifications (profile) */
 
 .profile-phone {
