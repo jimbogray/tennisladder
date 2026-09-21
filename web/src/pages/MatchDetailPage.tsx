@@ -211,9 +211,7 @@ export function MatchDetailPage() {
             <dt>Coming from</dt>
             <dd>
               {data.myTravelOrigin ? data.myTravelOrigin.label : "Not specified"}
-              <span className="match-detail-address">
-                {data.myTravelOrigin ? `${data.myTravelOrigin.address} · ` : ""}Only you can see this
-              </span>
+              <span className="match-detail-address">Only you can see this</span>
             </dd>
           </>
         ) : null}

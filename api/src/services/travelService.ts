@@ -1,9 +1,9 @@
-import { MatchStatus, type Location, type UserAddress } from "@prisma/client";
+import { MatchStatus, type Location } from "@prisma/client";
 import type { MatchTravelPlanDto, TravelPlanDto } from "@tennisladder/shared";
 import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
 import { toUserAddressDto } from "./addressService.js";
-import { geocodeLocation, geocodeUserAddress, type Coordinates } from "./geocodingService.js";
+import { geocodeLocation, type Coordinates } from "./geocodingService.js";
 import { getJson } from "./upstream.js";
 
 /**
@@ -78,25 +78,38 @@ function departureTime(startsAt: Date, seconds: number): Date {
   return new Date(Math.floor(latest / DEPARTURE_STEP_MS) * DEPARTURE_STEP_MS);
 }
 
+/** A saved address as this module needs it: a label to report back, and where it is. */
+interface TravelOrigin {
+  id: string;
+  label: string;
+  createdAt: Date;
+  latitude: number | null;
+  longitude: number | null;
+}
+
 /**
- * The shared core: geocode both ends, route between them, and work back from the arrival time.
- * Callers have already decided *which* address and location, and that the caller may see them.
- * Both rows must carry their geocoding cache columns, which are omitted by default (prisma.ts).
+ * The shared core: route between the two ends and work back from the arrival time. Callers have
+ * already decided *which* address and location, and that the caller may see them. Both rows must
+ * carry their coordinate columns, which are omitted by default (prisma.ts).
  */
 async function planJourney(
-  address: UserAddress,
+  address: TravelOrigin,
   location: Location,
   arriveBy: Date,
 ): Promise<TravelPlanDto> {
   if (!location.address) return { status: "NO_DESTINATION_ADDRESS" };
 
-  // Serial rather than parallel: geocoding is rate-limited to one request a second anyway.
-  const from = await geocodeUserAddress(address);
-  if (from.status !== "FOUND") return { status: "ORIGIN_NOT_FOUND" };
+  // The origin was geocoded when the player saved it, and its address wasn't kept, so there is
+  // nothing to look up here. Coordinates are missing only on a row saved before that change.
+  if (address.latitude === null || address.longitude === null) {
+    return { status: "ORIGIN_NOT_FOUND" };
+  }
+  const from = { latitude: address.latitude, longitude: address.longitude };
+
   const to = await geocodeLocation(location);
   if (to.status !== "FOUND") return { status: "DESTINATION_NOT_FOUND" };
 
-  const seconds = await drivingSeconds(from.coordinates, to.coordinates);
+  const seconds = await drivingSeconds(from, to.coordinates);
   if (seconds === null) return { status: "NO_ROUTE" };
   if (seconds > MAX_PLAUSIBLE_DRIVE_SECONDS) return { status: "TOO_FAR" };
 
@@ -108,8 +121,10 @@ async function planJourney(
   };
 }
 
-// Both ends opt back into the geocoding cache columns, which are omitted globally (prisma.ts).
+// A location opts back into its geocoding cache columns, omitted globally (prisma.ts).
 const withGeocodingCache = { omit: { latitude: false, longitude: false, geocodedAddress: false } } as const;
+// A saved address only has coordinates left to opt back into.
+const withCoordinates = { omit: { latitude: false, longitude: false } } as const;
 
 /**
  * The requesting player's own journey to a match: where they said they're coming from, and when
@@ -135,7 +150,7 @@ export async function getMatchTravelPlan(
   if (!travelOrigin) return { status: "NO_ORIGIN" };
 
   const [address, location] = await Promise.all([
-    prisma.userAddress.findUnique({ where: { id: travelOrigin.addressId }, ...withGeocodingCache }),
+    prisma.userAddress.findUnique({ where: { id: travelOrigin.addressId }, ...withCoordinates }),
     prisma.location.findUnique({ where: { id: match.proposedLocationId }, ...withGeocodingCache }),
   ]);
   // Neither is expected to be missing: deleting an address cascades to the choice pointing at it,
@@ -161,7 +176,7 @@ export async function getDeparturePlan(input: {
     // Scoped to the caller, so nobody can plan a journey from (or probe for) someone else's address.
     prisma.userAddress.findFirst({
       where: { id: input.addressId, userId: input.userId },
-      ...withGeocodingCache,
+      ...withCoordinates,
     }),
     prisma.location.findUnique({ where: { id: input.locationId }, ...withGeocodingCache }),
   ]);
