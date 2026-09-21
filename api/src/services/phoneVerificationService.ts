@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma.js";
 import { env } from "../config/env.js";
 import { hashToken } from "./tokenService.js";
-import { sendSms } from "./smsService.js";
+import { isSmsConfigured, sendSms } from "./smsService.js";
 
 /**
  * Registering a notification phone number: the user enters a number, we text them a six-digit
@@ -68,7 +68,7 @@ export class PhoneVerificationError extends Error {
   constructor(
     message: string,
     /** What the route should answer with — these map onto distinct user-facing situations. */
-    public status: 400 | 429 | 502,
+    public status: 400 | 429 | 502 | 503,
   ) {
     super(message);
   }
@@ -85,6 +85,16 @@ export async function startPhoneVerification(
   userId: string,
   rawPhoneNumber: string,
 ): Promise<{ phoneNumber: string; expiresInMinutes: number }> {
+  // With no provider and no log to fall back on — a production deployment that hasn't been given
+  // a sender number — the code would go nowhere, and answering 202 would leave the user watching
+  // for a text that was never sent. Say so instead.
+  if (!isSmsConfigured() && !env.logUnsentMessages) {
+    throw new PhoneVerificationError(
+      "Text messages aren't switched on for this site yet, so we can't confirm a number. Ask your club admin.",
+      503,
+    );
+  }
+
   const phoneNumber = normalizePhoneNumber(rawPhoneNumber);
   const now = new Date();
 

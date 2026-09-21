@@ -157,6 +157,9 @@ account.
   connection string, so SMS can be off while email is on; with no provider the code is logged
   instead, under the same `LOG_EMAIL_LINKS` switch unsent email links use. A send failure throws,
   where an email failure doesn't: the user is sitting in front of the page waiting for the code.
+  With neither a provider nor that log — a production deployment given no sender number — starting
+  a verification is refused outright (503), rather than answering "we've texted you" about a code
+  that went nowhere.
 - **Nothing sends notifications by text yet.** This is the registration half; the reminder and
   negotiation jobs still email only.
 
