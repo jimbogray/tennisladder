@@ -44,7 +44,7 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 - **PointsAdjustment**: id, userId, adjustedByAdminId, previousPoints, newPoints, reason? — audit trail for admin manual point overrides.
 - **PasswordResetToken**: id, userId, tokenHash (unique), expiresAt, usedAt? — supports the added password-reset flow.
 - **PhoneVerification**: id, userId, phoneNumber (the candidate, E.164), codeHash (sha256 of the six-digit code — deliberately *not* unique, unlike the token tables: six digits collide, and the code is only ever checked against the signed-in user's own newest row), attempts (capped, since six digits is cheap to guess), expiresAt, verifiedAt?. Indexed on `(userId, createdAt)`. See Phone Numbers below.
-- **UserAddress**: id, userId, label (unique per user, also compared case-insensitively), address, latitude?/longitude?/geocodedAddress? (the same lazy geocoding cache `Location` carries) — places a user travels to matches from (see Saved Addresses below).
+- **UserAddress**: id, userId, label (unique per user, also compared case-insensitively), latitude?/longitude? — places a user travels to matches from (see Saved Addresses below). There is deliberately no address column: the address is geocoded as the row is written and then dropped, so the coordinates are all that persist.
 - **MatchTravelOrigin**: id, matchId, userId, addressId — which saved address one player is coming from for one match, unique per (match, user).
 
 ## Match State Machine
@@ -122,7 +122,7 @@ is how to check the setting is right in a hosted environment.
 The match proposal forms show the forecast for the chosen location: a 7-day outlook, narrowing to the hours around the match (2 before, 3 after) once a date and time are picked.
 
 - **Providers** — both free and keyless, called server-side from `api/src/services/weatherService.ts` (geocoding via the shared `geocodingService.ts`, HTTP via `upstream.ts`), so the SPA never depends on their response shapes. Forecasts come from **Open-Meteo** (16-day horizon; the free tier is licensed for non-commercial use and requires the attribution link the UI shows — commercial use needs their paid API). Addresses are geocoded with OpenStreetMap's **Nominatim**, whose usage policy requires an identifying User-Agent, at most one request per second, and caching of results.
-- **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for both weather and a driving estimate. `UserAddress` carries the same three columns and goes through the same `geocodingService.ts` helpers.
+- **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for both weather and a driving estimate. A player's saved address is the exception to the lazy pattern: it is looked up once while being saved and the address itself is never stored (see Saved Addresses below).
 - **Forecast responses are cached in memory for 30 minutes per location**, which relies on the same single-replica assumption as the scheduled jobs (a second replica would only mean more upstream calls, not incorrect data).
 - Units are always metric in the API; the SPA converts to °F/mph for US-region locales.
 
@@ -196,6 +196,8 @@ account.
 
 Users save labelled addresses (Home, Office, or a custom label) at registration or on their profile, using the same Places autocomplete as the Locations page. When proposing, amending, countering or accepting a match, and later on a scheduled match, a player can pick which one they're coming from. Once the match is scheduled, that choice drives the departure time (see Driving Times below).
 
+- **Only the coordinates are kept.** `POST /players/me/addresses` geocodes the address before the insert and stores the label and the resulting latitude/longitude — the address itself is never written to the database, and `UserAddressDto` has no field for it. A home address is the most sensitive thing the app would otherwise hold, and nothing downstream needs it: a driving time is computed from coordinates, and the player recognises their own label. An address the map can't place is a 400 (retype it); a geocoder that's down is a 502 (try again shortly), because there is no way to accept the address and resolve it later without storing it.
+- **Registration is the lenient path.** Several addresses arrive with the account, before it exists, and are geocoded ahead of redeeming the registration code so a slow lookup can't spend a code on an account that is never created. Anything the map can't place is left out rather than failing the sign-up; the player re-adds it on their profile, where an error message can actually be shown.
 - **Private to the user.** Addresses are only reachable through `/players/me/addresses`, and a match's travel origin comes back only as `myTravelOrigin` on `GET /api/matches/:id`, always for the requesting user. Admins can't see either.
 - **Origins live in `MatchTravelOrigin`, not on `Match`.** Match rows are returned whole to both players and in the public match lists, so a column there would leak. For the same reason, choosing an origin writes no `MatchEvent`: the event thread is shown to both players and embedded in emails.
 - **Request semantics.** The propose, amend, counter and accept bodies take an optional `travelOriginAddressId`. If it's omitted, the current choice stays; `null` clears it; an id must belong to the caller. The SPA omits it while addresses are still loading, so a fast submit can't clear an earlier choice.
@@ -217,8 +219,10 @@ see what a time or a set of courts would cost them before offering it
   public demo server and overridable with `ROUTING_BASE_URL` for a self-hosted instance. Durations
   are cached in memory for 6 hours per rounded coordinate pair — road distances don't change, and
   the one thing that does (traffic) isn't modelled anyway.
-- **Both ends are geocoded lazily**, the player's saved address exactly like the location
-  (see Weather Forecast above), so a departure time costs no upstream calls once both are cached.
+- **Neither end usually costs an upstream call.** The location is geocoded lazily and cached (see
+  Weather Forecast above); the player's saved address was geocoded when they saved it and has
+  nothing left to look up. A saved address with null coordinates predates that change and reports
+  `ORIGIN_NOT_FOUND` until the player removes and re-adds it.
 - **A drive over 8 hours is reported as `TOO_FAR`, not as a departure time.** A club ladder's
   matches are local, so a journey that long means an address landed on the wrong continent rather
   than that anyone is really driving it — a location addressed "Flushing Meadows" geocodes to a

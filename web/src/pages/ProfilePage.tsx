@@ -36,7 +36,8 @@ function AddressesSection() {
       <h2>Your addresses</h2>
       <p className="profile-section-hint">
         Where you travel to matches from. When you propose or accept a match you can say which one
-        you're coming from. Only you can see these.
+        you're coming from. Only you can see these, and we keep only the map location each one
+        works out to — never the address you typed.
       </p>
       {error && <p role="alert">{error}</p>}
       {isLoading || !addresses ? (
@@ -44,7 +45,7 @@ function AddressesSection() {
       ) : (
         <>
           <SavedAddressList
-            addresses={addresses.map((a) => ({ key: a.id, label: a.label, address: a.address }))}
+            addresses={addresses.map((a) => ({ key: a.id, label: a.label }))}
             onRemove={handleRemove}
             removingKey={removingId}
           />

@@ -67,14 +67,17 @@ export interface AuthProvidersDto {
 }
 
 // A place the user travels to matches from. Only ever returned to its owner.
+//
+// No address: the postal address is geocoded while it's being saved and then discarded, so the
+// label is all there is to show. See the UserAddress model in schema.prisma.
 export interface UserAddressDto {
   id: string;
   // "Home", "Office", or a label the user typed.
   label: string;
-  address: string;
   createdAt: string;
 }
 
+// The address is sent once, on the way in, and never stored or returned.
 export interface CreateUserAddressRequest {
   label: string;
   address: string;

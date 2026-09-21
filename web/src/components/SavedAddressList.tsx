@@ -1,10 +1,16 @@
-/** A user's own labelled addresses, each with a remove button. Renders nothing when empty. */
+/**
+ * A user's own labelled addresses, each with a remove button. Renders nothing when empty.
+ *
+ * `address` is optional because a saved one doesn't have one to show: the server keeps only the
+ * coordinates. Registration passes it, since there the list is of addresses still sitting in the
+ * browser, not yet sent anywhere.
+ */
 export function SavedAddressList({
   addresses,
   onRemove,
   removingKey,
 }: {
-  addresses: { key: string; label: string; address: string }[];
+  addresses: { key: string; label: string; address?: string }[];
   onRemove: (key: string) => void;
   removingKey?: string | null;
 }) {
@@ -17,7 +23,7 @@ export function SavedAddressList({
           <div className="location-row">
             <div>
               <strong>{label}</strong>
-              <p className="location-address">{address}</p>
+              {address ? <p className="location-address">{address}</p> : null}
             </div>
             <div className="location-actions">
               <button

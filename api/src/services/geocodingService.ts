@@ -6,8 +6,12 @@ import { getJson } from "./upstream.js";
  * forecast (weatherService) and driving times (travelService).
  *
  * Geocoding is OpenStreetMap's Nominatim — free and keyless. Its usage policy caps clients at one
- * request per second and requires results to be cached, so every geocodable row carries its own
- * lazily-filled cache columns and is only looked up again when its address changes.
+ * request per second and requires results to be cached, so a Location carries its own lazily-filled
+ * cache columns and is only looked up again when its address changes.
+ *
+ * A player's saved address is the exception: it is looked up once, while it's being saved, and the
+ * address itself is then discarded rather than cached (addressService.createAddress). There's
+ * nothing left to look up again, which is the point — see the UserAddress model.
  */
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
@@ -64,7 +68,7 @@ export async function geocode(address: string): Promise<Coordinates | null> {
   return null;
 }
 
-/** The cache columns every geocodable row carries; see the comments on Location/UserAddress. */
+/** The cache columns a Location carries; see the comments on the model. */
 interface GeocodedRow {
   address: string | null;
   latitude: number | null;
@@ -72,39 +76,27 @@ interface GeocodedRow {
   geocodedAddress: string | null;
 }
 
-type CacheWriter = (cache: {
-  latitude: number | null;
-  longitude: number | null;
-  geocodedAddress: string;
-}) => Promise<unknown>;
+/**
+ * Coordinates for a match location, filling its cache on the way. A stale cache is one taken from
+ * a different address than the row now holds. A miss is cached too (null coordinates), so an
+ * address the map doesn't know isn't looked up again every time.
+ */
+export async function geocodeLocation(
+  location: GeocodedRow & { id: string },
+): Promise<GeocodeResult> {
+  if (!location.address) return { status: "NO_ADDRESS" };
 
-async function cachedGeocode(row: GeocodedRow, saveCache: CacheWriter): Promise<GeocodeResult> {
-  if (!row.address) return { status: "NO_ADDRESS" };
-
-  let { latitude, longitude } = row;
-  // A stale cache is one taken from a different address than the row now holds. A miss is cached
-  // too (null coordinates), so an address the map doesn't know isn't looked up again every time.
-  if (row.geocodedAddress !== row.address) {
-    const coordinates = await geocode(row.address);
+  let { latitude, longitude } = location;
+  if (location.geocodedAddress !== location.address) {
+    const coordinates = await geocode(location.address);
     latitude = coordinates?.latitude ?? null;
     longitude = coordinates?.longitude ?? null;
-    await saveCache({ latitude, longitude, geocodedAddress: row.address });
+    await prisma.location.update({
+      where: { id: location.id },
+      data: { latitude, longitude, geocodedAddress: location.address },
+    });
   }
 
   if (latitude === null || longitude === null) return { status: "NOT_FOUND" };
   return { status: "FOUND", coordinates: { latitude, longitude } };
-}
-
-/** Coordinates for a match location, filling its cache on the way. */
-export function geocodeLocation(location: GeocodedRow & { id: string }): Promise<GeocodeResult> {
-  return cachedGeocode(location, (cache) =>
-    prisma.location.update({ where: { id: location.id }, data: cache }),
-  );
-}
-
-/** Coordinates for one of a player's saved addresses, filling its cache on the way. */
-export function geocodeUserAddress(address: GeocodedRow & { id: string }): Promise<GeocodeResult> {
-  return cachedGeocode(address, (cache) =>
-    prisma.userAddress.update({ where: { id: address.id }, data: cache }),
-  );
 }

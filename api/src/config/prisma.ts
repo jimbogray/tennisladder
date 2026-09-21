@@ -4,9 +4,10 @@ import { PrismaClient } from "@prisma/client";
 // response. Reads that genuinely need it (i.e. login verification) opt back in per-query with
 // `omit: { passwordHash: false }`.
 //
-// The geocoding columns on Location and UserAddress are likewise omitted: they're an internal
-// cache for the weather forecast and driving times (see geocodingService.ts), not part of
-// LocationDto or UserAddressDto.
+// Location's geocoding cache is likewise omitted: it's internal to the weather forecast and
+// driving times (see geocodingService.ts), not part of LocationDto. So are a saved address's
+// coordinates — they're all that's left of an address the player gave us, and nothing outside
+// travelService has any business reading them back.
 export const prisma = new PrismaClient({
   omit: {
     user: {
@@ -20,7 +21,6 @@ export const prisma = new PrismaClient({
     userAddress: {
       latitude: true,
       longitude: true,
-      geocodedAddress: true,
     },
   },
 });

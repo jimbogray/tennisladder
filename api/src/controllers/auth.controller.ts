@@ -20,7 +20,7 @@ import {
   RegistrationCodeError,
 } from "../services/registrationCodeService.js";
 import { sendEmail } from "../services/emailService.js";
-import { addressListSchema } from "../services/addressService.js";
+import { addressListSchema, geocodeNewUserAddresses } from "../services/addressService.js";
 import { renderPasswordResetEmail } from "../emails/templates/passwordReset.js";
 import { env } from "../config/env.js";
 
@@ -86,6 +86,10 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
+  // Ahead of redeeming the code, because this waits on OpenStreetMap: a lookup slow enough for
+  // the browser to give up shouldn't leave a registration code spent on an account never created.
+  const addressRows = data.addresses?.length ? await geocodeNewUserAddresses(data.addresses) : [];
+
   let code;
   try {
     code = await redeemRegistrationCode(data.registrationCode, email);
@@ -99,6 +103,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
   // The invite, not the registrant, decides whether the account is a player, an admin, or both.
   const { role, participatesInLadder } = accountFieldsFor(code.accountType);
+
   const user = await prisma.user.create({
     data: {
       firstName: data.firstName,
@@ -113,7 +118,10 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
       // Redeeming a code is what "finished signing up" means; only Google-first accounts arrive
       // without one and have to come back through POST /auth/complete-profile.
       profileCompletedAt: new Date(),
-      addresses: data.addresses?.length ? { create: data.addresses } : undefined,
+      // Geocoded first: only a label and coordinates are stored, never the address itself
+      // (addressService). Anything the map can't place is quietly left out rather than failing
+      // the registration — see geocodeNewUserAddresses.
+      addresses: addressRows.length ? { create: addressRows } : undefined,
     },
   });
 
