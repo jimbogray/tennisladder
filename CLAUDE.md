@@ -107,9 +107,12 @@ suite above, anything else still needs checking by hand.
 /packages/shared   @tennisladder/shared — hand-maintained enums + DTO types shared by api and web,
                    plus the handful of pure helpers both sides must agree on (calendar.ts).
                    Must be built (npm run build --workspace=@tennisladder/shared) before api/web
-                   typecheck, since they import it as a real package, not a path alias. Root
-                   postinstall does this automatically; after pulling schema/enum changes, rebuild
-                   it manually if types look stale.
+                   typecheck, since they import it as a real package, not a path alias, and `dist/`
+                   is gitignored — so a branch switch leaves a stale build behind. Root postinstall
+                   builds it, and each workspace's `predev` rebuilds it before the dev server
+                   starts; `lint` and `build` do not, so rebuild manually if types look stale after
+                   pulling schema/enum changes. A shared export that's missing from `dist` fails at
+                   runtime, not just at typecheck, when it's a value rather than a type.
 /api               Express API (ESM, "type": "module" — all relative imports use .js extensions
                    even in .ts source).
 /web               React (Vite) SPA.

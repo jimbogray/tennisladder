@@ -47,7 +47,7 @@ export function UserMenu() {
         aria-controls="user-menu-panel"
         onClick={() => setOpen((isOpen) => !isOpen)}
       >
-        <Avatar firstName={user.firstName} lastName={user.lastName} />
+        <Avatar firstName={user.firstName} lastName={user.lastName} avatarId={user.avatarId} />
       </button>
 
       {open ? (

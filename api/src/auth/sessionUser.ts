@@ -1,5 +1,5 @@
 import type { User } from "@prisma/client";
-import type { SessionUserDto } from "@tennisladder/shared";
+import { toAvatarId, type SessionUserDto } from "@tennisladder/shared";
 
 // Accept a User without the (globally omitted) passwordHash — this helper never reads it.
 export type SessionUser = Omit<User, "passwordHash">;
@@ -17,6 +17,9 @@ export function toSessionUserDto(user: SessionUser): SessionUserDto {
     // toFixed(1), not toString(): a stored 3.0 must come back as "3.0" so it matches both the
     // ladder's rendering and the rating options on the profile form.
     ustaRating: user.ustaRating?.toFixed(1) ?? null,
+    // Narrowed rather than cast: artwork that's been retired since the user picked it should
+    // fall back to their initials, not render as a missing portrait.
+    avatarId: toAvatarId(user.avatarId),
     profileCompletedAt: user.profileCompletedAt?.toISOString() ?? null,
     // Non-null only once a texted code confirmed it, so this doubles as "phone verified".
     phoneNumber: user.phoneNumber,

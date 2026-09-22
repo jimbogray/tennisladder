@@ -1,5 +1,6 @@
 import type {
   AuthProvidersDto,
+  AvatarId,
   CompleteProfileRequest,
   CreateUserAddressRequest,
   SessionUserDto,
@@ -34,6 +35,8 @@ export interface RegisterRequest {
   email: string;
   password: string;
   ustaRating?: string;
+  // "" is the initials badge, the same value the profile form sends.
+  avatarId?: AvatarId | "";
   registrationCode: string;
   addresses?: CreateUserAddressRequest[];
 }

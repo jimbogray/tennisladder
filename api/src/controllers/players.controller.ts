@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { USTA_RATINGS } from "@tennisladder/shared";
+import { AVATAR_IDS, USTA_RATINGS, toAvatarId } from "@tennisladder/shared";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { toSessionUserDto } from "../auth/sessionUser.js";
@@ -32,7 +32,14 @@ export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
     // profileCompletedAt: a Google signup that hasn't redeemed an invite code isn't on the team.
     where: { participatesInLadder: true, removedAt: null, profileCompletedAt: { not: null } },
     orderBy: { points: "desc" },
-    select: { id: true, firstName: true, lastName: true, points: true, ustaRating: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      points: true,
+      ustaRating: true,
+      avatarId: true,
+    },
   });
 
   // Ties have no winnerId/loserId, so they're counted off the challenger/opponent columns and
@@ -77,6 +84,7 @@ export const listLadder = asyncHandler(async (_req: Request, res: Response) => {
       // toFixed(1), not toString(): NTRP ratings are always written to one decimal place, and
       // Decimal.toString() would render a stored 3.0 as "3" next to its "2.5"/"3.5" neighbours.
       ustaRating: player.ustaRating?.toFixed(1) ?? null,
+      avatarId: toAvatarId(player.avatarId),
       points: player.points,
       wins: winsByUserId.get(player.id) ?? 0,
       losses: lossesByUserId.get(player.id) ?? 0,
@@ -102,9 +110,16 @@ export const listChallengeable = asyncHandler(async (req: Request, res: Response
       role: true,
       participatesInLadder: true,
       ustaRating: true,
+      avatarId: true,
     },
   });
-  res.json(players.map((p) => ({ ...p, ustaRating: p.ustaRating?.toFixed(1) ?? null })));
+  res.json(
+    players.map((p) => ({
+      ...p,
+      ustaRating: p.ustaRating?.toFixed(1) ?? null,
+      avatarId: toAvatarId(p.avatarId),
+    })),
+  );
 });
 
 export const me = asyncHandler(async (req: Request, res: Response) => {
@@ -125,14 +140,21 @@ const updateProfileSchema = z.object({
       errorMap: () => ({ message: "Choose a USTA rating from the list" }),
     })
     .optional(),
+  // An empty string is the "back to my initials" option, the same shape the rating field uses.
+  avatarId: z
+    .union([z.enum(AVATAR_IDS), z.literal(""), z.null()], {
+      errorMap: () => ({ message: "Choose one of the available avatars" }),
+    })
+    .optional(),
 });
 
 /**
- * Name and USTA rating are the self-editable fields; email and role changes need a different flow.
+ * Name, USTA rating and avatar are the self-editable fields; email and role changes need a
+ * different flow.
  * Points aren't touchable here either — they're earned, or adjusted by an admin.
  */
 export const updateMe = asyncHandler(async (req: Request, res: Response) => {
-  const { firstName, lastName, ustaRating } = updateProfileSchema.parse(req.body);
+  const { firstName, lastName, ustaRating, avatarId } = updateProfileSchema.parse(req.body);
   const user = await prisma.user.update({
     where: { id: req.user!.id },
     data: {
@@ -143,6 +165,8 @@ export const updateMe = asyncHandler(async (req: Request, res: Response) => {
       ...(ustaRating !== undefined && req.user!.participatesInLadder
         ? { ustaRating: ustaRating === "" ? null : ustaRating }
         : {}),
+      // Unlike a rating, a portrait isn't a ladder concept, so coach-admins get one too.
+      ...(avatarId !== undefined ? { avatarId: avatarId === "" ? null : avatarId } : {}),
     },
   });
   res.json(toSessionUserDto(user));

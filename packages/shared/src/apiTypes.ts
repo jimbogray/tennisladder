@@ -1,5 +1,6 @@
 import type {
   AccountType,
+  AvatarId,
   MatchEventType,
   MatchStatus,
   ResultOutcome,
@@ -16,6 +17,8 @@ export interface PublicUserDto {
   points: number;
   // Serialized from a Decimal(2,1) to one decimal place; null when no rating is recorded.
   ustaRating: string | null;
+  // The portrait the player picked; null means they haven't, and their initials are shown instead.
+  avatarId: AvatarId | null;
 }
 
 export interface SessionUserDto extends PublicUserDto {
@@ -54,6 +57,8 @@ export interface UpdateProfileRequest {
   // Omitted leaves the rating as it is; null clears it. Ignored for accounts off the ladder,
   // where a rating means nothing.
   ustaRating?: UstaRating | null;
+  // Omitted leaves the portrait as it is; null goes back to initials.
+  avatarId?: AvatarId | null;
 }
 
 // POST /api/auth/complete-profile — what a Google-first signup still owes before it's on the team.
@@ -90,6 +95,7 @@ export interface LadderEntryDto {
   lastName: string;
   // Serialized from a Decimal(2,1); null for players who haven't recorded a rating.
   ustaRating: string | null;
+  avatarId: AvatarId | null;
   points: number;
   wins: number;
   losses: number;
