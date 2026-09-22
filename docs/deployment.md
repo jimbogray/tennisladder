@@ -378,19 +378,6 @@ won't notice.
 
 ---
 
-## The earlier `tennisladder-rg`
-
-The first attempt created `tennisladder-db` in `tennisladder-rg`. It isn't part of this layout and
-**can't work as-is**: it was created with public access Disabled, which rules out the firewall
-rules both the API and the pipeline need. It's empty, so delete it rather than repair it — it bills
-for as long as it exists:
-
-```bash
-az group delete --name tennisladder-rg
-```
-
----
-
 ## Troubleshooting
 
 **`The location is restricted from performing this operation`** — Postgres provisioning is
