@@ -1,11 +1,16 @@
 import { Prisma, MatchEventType, MatchStatus, ResultOutcome } from "@prisma/client";
-import { googleCalendarUrlForMatch } from "@tennisladder/shared";
 import { prisma } from "../config/prisma.js";
-import { env } from "../config/env.js";
 import { generateOpaqueToken, hashToken } from "./tokenService.js";
-import { sendEmail } from "./emailService.js";
-import { renderMatchConfirmedEmail } from "../emails/templates/matchConfirmed.js";
-import { formatMatchDateTimeForEmail } from "../emails/formatDateTime.js";
+import {
+  notifyChallengeProposed,
+  notifyMatchCalledOff,
+  notifyMatchConfirmed,
+  notifyProposalUpdated,
+  notifyResultDisputed,
+  notifyResultFinalized,
+  notifyResultSubmitted,
+  type IssuedResultToken,
+} from "./matchNotifications.js";
 
 /** Thrown for invalid match actions (bad turn, self-challenge, etc.). Callers surface as a 400. */
 export class MatchValidationError extends Error {}
@@ -109,8 +114,8 @@ export async function proposeMatch(input: ProposeMatchInput) {
 
   // The opponent must respond first, so the turn starts with them. Record the opening PROPOSED
   // event in the same transaction as the Match so a challenge always has its negotiation history.
-  return prisma.$transaction(async (tx) => {
-    const match = await tx.match.create({
+  const match = await prisma.$transaction(async (tx) => {
+    const created = await tx.match.create({
       data: {
         challengerId: input.challengerId,
         opponentId: input.opponentId,
@@ -125,7 +130,7 @@ export async function proposeMatch(input: ProposeMatchInput) {
 
     await tx.matchEvent.create({
       data: {
-        matchId: match.id,
+        matchId: created.id,
         type: MatchEventType.PROPOSED,
         actorUserId: input.challengerId,
         snapshotDateTime: input.proposedDateTime,
@@ -134,10 +139,14 @@ export async function proposeMatch(input: ProposeMatchInput) {
       },
     });
 
-    await applyTravelOrigin(tx, match.id, input.challengerId, input.travelOriginAddressId);
+    await applyTravelOrigin(tx, created.id, input.challengerId, input.travelOriginAddressId);
 
-    return match;
+    return created;
   });
+
+  await notifyChallengeProposed(match.id);
+
+  return match;
 }
 
 /** Loads a match and checks the acting user is one of its two players. */
@@ -187,7 +196,7 @@ export async function amendProposal(matchId: string, actingUserId: string, input
   await assertLocationExists(input.proposedLocationId);
   await assertOwnAddress(actingUserId, input.travelOriginAddressId);
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -213,6 +222,10 @@ export async function amendProposal(matchId: string, actingUserId: string, input
 
     return updated;
   });
+
+  await notifyProposalUpdated(matchId, actingUserId, "AMENDED");
+
+  return updated;
 }
 
 /**
@@ -231,7 +244,7 @@ export async function counterPropose(matchId: string, actingUserId: string, inpu
   await assertLocationExists(input.proposedLocationId);
   await assertOwnAddress(actingUserId, input.travelOriginAddressId);
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -258,13 +271,10 @@ export async function counterPropose(matchId: string, actingUserId: string, inpu
 
     return updated;
   });
-}
 
-/** One "I won"/"I lost" link: the raw token that goes in the email, and who it speaks for. */
-interface IssuedResultToken {
-  userId: string;
-  outcome: ResultOutcome;
-  rawToken: string;
+  await notifyProposalUpdated(matchId, actingUserId, "COUNTER_PROPOSED");
+
+  return updated;
 }
 
 /**
@@ -280,65 +290,6 @@ function issueResultTokens(challengerId: string, opponentId: string): IssuedResu
       rawToken: generateOpaqueToken(),
     })),
   );
-}
-
-/**
- * Emails both players their confirmation, each with their own pair of result links.
- *
- * Deliberately never throws: by the time this runs the match is accepted and committed, so a mail
- * failure mustn't turn a successful accept into an error for the player who accepted. Nothing is
- * lost either way — both players can still report the result on the site.
- */
-async function sendMatchConfirmedEmails(
-  match: { id: string; challengerId: string; opponentId: string; proposedLocationId: string },
-  scheduledDateTime: Date,
-  tokens: IssuedResultToken[],
-): Promise<void> {
-  try {
-    const [challenger, opponent, location] = await Promise.all([
-      prisma.user.findUniqueOrThrow({ where: { id: match.challengerId } }),
-      prisma.user.findUniqueOrThrow({ where: { id: match.opponentId } }),
-      prisma.location.findUniqueOrThrow({ where: { id: match.proposedLocationId } }),
-    ]);
-
-    const when = formatMatchDateTimeForEmail(scheduledDateTime);
-    // One event for both emails: the players are being invited to the same match, and the link
-    // carries a UTC instant, so each calendar shows it in its own owner's zone.
-    const calendarUrl = googleCalendarUrlForMatch({
-      challengerName: `${challenger.firstName} ${challenger.lastName}`,
-      opponentName: `${opponent.firstName} ${opponent.lastName}`,
-      scheduledDateTime,
-      locationName: location.name,
-      locationAddress: location.address,
-      matchUrl: `${env.webAppUrl}/matches/${match.id}`,
-    });
-    const linkFor = (userId: string, outcome: ResultOutcome) => {
-      const issued = tokens.find((token) => token.userId === userId && token.outcome === outcome);
-      if (!issued) throw new Error(`no ${outcome} result token was issued for user ${userId}`);
-      return `${env.webAppUrl}/results/confirm/${issued.rawToken}`;
-    };
-
-    for (const [recipient, other] of [
-      [challenger, opponent],
-      [opponent, challenger],
-    ] as const) {
-      const { subject, html } = renderMatchConfirmedEmail({
-        recipientFirstName: recipient.firstName,
-        opponentFirstName: other.firstName,
-        scheduledDateTime: when,
-        locationName: location.name,
-        calendarUrl,
-        wonResultUrl: linkFor(recipient.id, ResultOutcome.WON),
-        lostResultUrl: linkFor(recipient.id, ResultOutcome.LOST),
-      });
-      await sendEmail({ to: recipient.email, subject, html });
-    }
-  } catch (error) {
-    console.error(
-      `[matchService] match ${match.id} was accepted but its confirmation emails failed`,
-      error,
-    );
-  }
 }
 
 /**
@@ -398,7 +349,7 @@ export async function acceptMatch(
 
   // Only once the transaction has committed: an email promising links that a rolled-back
   // transaction never stored would be worse than sending nothing at all.
-  await sendMatchConfirmedEmails(match, match.proposedDateTime, resultTokens);
+  await notifyMatchConfirmed(matchId, match.proposedDateTime, resultTokens);
 
   return updated;
 }
@@ -414,7 +365,7 @@ export async function declineMatch(matchId: string, actingUserId: string) {
     throw new MatchValidationError("You can't decline your own proposal");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: { status: MatchStatus.DECLINED, lastActionAt: new Date() },
@@ -426,6 +377,10 @@ export async function declineMatch(matchId: string, actingUserId: string) {
 
     return updated;
   });
+
+  await notifyMatchCalledOff(matchId, actingUserId, "DECLINED");
+
+  return updated;
 }
 
 /** The challenger pulls their own challenge before it's been agreed. Terminal. */
@@ -439,7 +394,7 @@ export async function withdrawMatch(matchId: string, actingUserId: string, comme
     throw new MatchValidationError("Only the challenger can withdraw this challenge");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -455,6 +410,10 @@ export async function withdrawMatch(matchId: string, actingUserId: string, comme
 
     return updated;
   });
+
+  await notifyMatchCalledOff(matchId, actingUserId, "WITHDRAWN", comment);
+
+  return updated;
 }
 
 /** Calls off an arranged match. Either player may do this, with an optional reason. */
@@ -465,7 +424,7 @@ export async function cancelMatch(matchId: string, actingUserId: string, comment
     throw new MatchValidationError("Only a scheduled match can be cancelled");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -486,6 +445,10 @@ export async function cancelMatch(matchId: string, actingUserId: string, comment
 
     return updated;
   });
+
+  await notifyMatchCalledOff(matchId, actingUserId, "CANCELLED", comment);
+
+  return updated;
 }
 
 /**
@@ -507,7 +470,7 @@ export async function adminCancelMatch(matchId: string, adminUserId: string, com
     throw new MatchValidationError("Only a match that's still being arranged or scheduled can be cancelled");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     // awaitingResponseFromUserId is left as it was — it's non-nullable, and every other terminal
     // transition here leaves it behind too, since status alone decides whether anyone owes a reply.
     const updated = await tx.match.update({
@@ -530,6 +493,10 @@ export async function adminCancelMatch(matchId: string, adminUserId: string, com
 
     return updated;
   });
+
+  await notifyMatchCalledOff(matchId, adminUserId, "ADMIN_CANCELLED", comment);
+
+  return updated;
 }
 
 export type ResultOutcomeInput = "WON" | "LOST" | "TIED";
@@ -569,7 +536,7 @@ export async function proposeResult(
 
   const { winnerId, loserId, isTie } = resolveOutcome(match, actingUserId, outcome);
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -594,6 +561,10 @@ export async function proposeResult(
 
     return updated;
   });
+
+  await notifyResultSubmitted(matchId, actingUserId, false);
+
+  return updated;
 }
 
 /** Reporter corrects their own score before the other player has answered. Turn stays put. */
@@ -613,7 +584,7 @@ export async function amendResult(
 
   const { winnerId, loserId, isTie } = resolveOutcome(match, actingUserId, outcome);
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: { winnerId, loserId, isTie, lastActionAt: new Date() },
@@ -630,6 +601,10 @@ export async function amendResult(
 
     return updated;
   });
+
+  await notifyResultSubmitted(matchId, actingUserId, true);
+
+  return updated;
 }
 
 /**
@@ -652,7 +627,7 @@ export async function confirmResult(matchId: string, actingUserId: string) {
 
   const { winnerId, loserId } = match;
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     // A tie moves nobody: points are only ever awarded for a win.
     const pointsAwarded =
       winnerId && loserId ? await applyLadderPoints(tx, winnerId, loserId) : 0;
@@ -680,6 +655,11 @@ export async function confirmResult(matchId: string, actingUserId: string) {
 
     return updated;
   });
+
+  // After the transaction, so the points each player is told they're on are the ones that landed.
+  await notifyResultFinalized(matchId);
+
+  return updated;
 }
 
 /** The other player disagrees with the score. Lands on the admin dashboard for a manual override. */
@@ -693,7 +673,7 @@ export async function rejectResult(matchId: string, actingUserId: string, commen
     throw new MatchValidationError("You can't reject a score you reported yourself");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: { status: MatchStatus.RESULT_DISPUTED, lastActionAt: new Date() },
@@ -710,6 +690,10 @@ export async function rejectResult(matchId: string, actingUserId: string, commen
 
     return updated;
   });
+
+  await notifyResultDisputed(matchId, actingUserId, comment);
+
+  return updated;
 }
 
 export async function adminOverrideResult(
@@ -719,7 +703,8 @@ export async function adminOverrideResult(
   loserId: string,
 ) {
   // TODO: force status=COMPLETED, isAdminOverride=true, write ADMIN_OVERRIDE_RESULT event,
-  // calls applyLadderPoints, voids any unused MatchResultToken rows.
+  // calls applyLadderPoints, voids any unused MatchResultToken rows, and — like every other
+  // transition here — notifies both players afterwards with notifyResultFinalized(matchId).
   throw new Error("Not implemented");
 }
 
