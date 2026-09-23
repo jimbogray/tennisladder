@@ -95,6 +95,36 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 2. **24-hours-after stale result reminder**: `status IN (SCHEDULED, RESULT_PENDING)`, `scheduledDateTime` >24h ago, `staleResultReminderSentAt IS NULL`.
 3. Registration code expiry needs no job — computed at read time from `expiresAt`.
 
+## Live Updates
+
+An open page follows changes other people make, without a reload: a match page moves on when the
+other player answers, and the ladder re-sorts when a result is confirmed.
+
+- **Server-sent events on `GET /api/live`** (`api/src/services/liveUpdates.ts`), not WebSockets or
+  polling. Traffic is one-way, SSE is plain HTTP through the Container Apps ingress, and nothing
+  polls while nothing changes. Subscribers are held in memory, which is the same single-replica
+  assumption the scheduled jobs make; a second replica would need a shared channel (Postgres
+  `LISTEN/NOTIFY`) so a change made on one reaches pages connected to the other.
+- **A frame is a pointer, not data**: `{type: "match", matchId}` or `{type: "ladder"}`
+  (`LiveUpdateDto`). The page refetches through its normal endpoint, so the stream never carries
+  anything its reader couldn't already fetch, which is also why it can go to every signed-in user
+  rather than only the two players.
+- **Every Match change goes through `commitMatchChange`** in `matchService.ts`, which publishes only
+  after the transaction commits (a page that refetched on an earlier announcement would read the
+  old state and keep it). A completed match also announces the ladder, as do profile edits and an
+  admin changing who is on the team.
+- **Auth is the bearer token, checked once when the stream opens.** The SPA reads the stream with
+  `fetch` because `EventSource` can't send an `Authorization` header. The server ends the stream
+  when that token's lifetime (`JWT_ACCESS_TTL_MINUTES`) is up; the client
+  (`web/src/hooks/useLiveUpdates.ts`, mounted once in `Layout`) reconnects, and a 401 on reconnect
+  mints a fresh access token from the refresh cookie first. A 25-second heartbeat comment keeps
+  idle proxies from closing a quiet stream. After any gap it refetches everything live-updated,
+  since changes during the gap went unannounced.
+- **A form open on a match that someone else changes is closed**, with a line saying who changed
+  it. Whatever it was about to send was written against the old state, and would either be
+  refused or undo what the other player just did. The newest `MatchEvent` is what detects the
+  change, and its actor says whether it was someone else's.
+
 ## Rate Limiting
 
 `express-rate-limit` (`api/src/middleware/rateLimit.ts`), with counters in memory — the same

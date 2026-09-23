@@ -127,11 +127,37 @@ export function MatchDetailPage() {
   const [travelOrigin, setTravelOrigin] = useState<string | null>(null);
   const [endComment, setEndComment] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The newest thread event this page has shown, so a change someone else makes can be noticed.
+  const [seenEvent, setSeenEvent] = useState<{ matchId: string; eventId: string } | null>(null);
+  const [changedNotice, setChangedNotice] = useState<string | null>(null);
 
   if (isLoading || !data) return <p>Loading…</p>;
 
+  // Every change to a match writes a thread event, so a new newest event is a new state. When
+  // it's someone else's, say so; and if a form was open, close it, since whatever it was about to
+  // send was written against the old state and would now fail or undo what they just did.
+  const latestEvent = data.events[data.events.length - 1];
+  if (latestEvent && (seenEvent?.matchId !== data.id || seenEvent.eventId !== latestEvent.id)) {
+    setSeenEvent({ matchId: data.id, eventId: latestEvent.id });
+    if (seenEvent?.matchId === data.id && latestEvent.actorUserId !== user?.id) {
+      const actor =
+        latestEvent.actorUserId === data.challenger.id
+          ? data.challenger.firstName
+          : latestEvent.actorUserId === data.opponent.id
+            ? data.opponent.firstName
+            : "An admin";
+      setChangedNotice(
+        mode === "none"
+          ? `${actor} just updated this match.`
+          : `${actor} just updated this match, so what you were doing wasn't sent. Take another look first.`,
+      );
+      setMode("none");
+    }
+  }
+
   async function run(action: () => Promise<unknown>) {
     setError(null);
+    setChangedNotice(null);
     try {
       await action();
       setMode("none");
@@ -299,6 +325,7 @@ export function MatchDetailPage() {
         <TravelPlan matchId={data.id} scheduledDateTime={data.scheduledDateTime} />
       ) : null}
 
+      {changedNotice ? <p role="status">{changedNotice}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
 
       {isParticipant && negotiating && mode === "none" ? (

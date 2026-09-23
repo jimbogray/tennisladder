@@ -312,3 +312,8 @@ export interface PlayerDataExportDto {
     adjustedAt: string;
   }[];
 }
+
+// Pushed down `GET /api/live` (server-sent events) whenever something an open page shows has
+// changed. Deliberately just a pointer: the page refetches through its normal endpoint, so a
+// nudge never carries anything its reader isn't already allowed to fetch.
+export type LiveUpdateDto = { type: "match"; matchId: string } | { type: "ladder" };
