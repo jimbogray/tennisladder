@@ -71,10 +71,13 @@ Plus two scheduled jobs that email without a transition: the match reminder
 
 ### Where the notifications live
 
-Every one of them is sent from `api/src/services/matchNotifications.ts`, called by `matchService`
-once the transition's transaction has committed — never inside it, since an email promising links a
-rolled-back transaction never stored is worse than no email, and no transition is worth failing over
-a mail provider being down. Nothing in that module throws for the same reason; failures are logged.
+Every one of them is sent from `api/src/services/matchNotifications.ts`, through the same
+`commitMatchChange` seam the live updates use: the notification runs once the transition's
+transaction has committed, never inside it, since an email promising links a rolled-back
+transaction never stored is worse than no email, and no transition is worth failing over a mail
+provider being down. Nothing in that module throws for the same reason; failures are logged. One
+transition sends outside the seam — accepting a challenge, whose confirmation emails carry the raw
+result tokens, which exist only in that moment and not on the committed row.
 
 Two consequences worth keeping:
 
@@ -121,6 +124,36 @@ In-process **`node-cron`**, polling every minute, on the always-on Express/Conta
 2. **24-hours-after stale result reminder**: `status IN (SCHEDULED, RESULT_PENDING)`, `scheduledDateTime` >24h ago, `staleResultReminderSentAt IS NULL`.
 3. Registration code expiry needs no job — computed at read time from `expiresAt`.
 
+## Live Updates
+
+An open page follows changes other people make, without a reload: a match page moves on when the
+other player answers, and the ladder re-sorts when a result is confirmed.
+
+- **Server-sent events on `GET /api/live`** (`api/src/services/liveUpdates.ts`), not WebSockets or
+  polling. Traffic is one-way, SSE is plain HTTP through the Container Apps ingress, and nothing
+  polls while nothing changes. Subscribers are held in memory, which is the same single-replica
+  assumption the scheduled jobs make; a second replica would need a shared channel (Postgres
+  `LISTEN/NOTIFY`) so a change made on one reaches pages connected to the other.
+- **A frame is a pointer, not data**: `{type: "match", matchId}` or `{type: "ladder"}`
+  (`LiveUpdateDto`). The page refetches through its normal endpoint, so the stream never carries
+  anything its reader couldn't already fetch, which is also why it can go to every signed-in user
+  rather than only the two players.
+- **Every Match change goes through `commitMatchChange`** in `matchService.ts`, which publishes only
+  after the transaction commits (a page that refetched on an earlier announcement would read the
+  old state and keep it). A completed match also announces the ladder, as do profile edits and an
+  admin changing who is on the team.
+- **Auth is the bearer token, checked once when the stream opens.** The SPA reads the stream with
+  `fetch` because `EventSource` can't send an `Authorization` header. The server ends the stream
+  when that token's lifetime (`JWT_ACCESS_TTL_MINUTES`) is up; the client
+  (`web/src/hooks/useLiveUpdates.ts`, mounted once in `Layout`) reconnects, and a 401 on reconnect
+  mints a fresh access token from the refresh cookie first. A 25-second heartbeat comment keeps
+  idle proxies from closing a quiet stream. After any gap it refetches everything live-updated,
+  since changes during the gap went unannounced.
+- **A form open on a match that someone else changes is closed**, with a line saying who changed
+  it. Whatever it was about to send was written against the old state, and would either be
+  refused or undo what the other player just did. The newest `MatchEvent` is what detects the
+  change, and its actor says whether it was someone else's.
+
 ## Rate Limiting
 
 `express-rate-limit` (`api/src/middleware/rateLimit.ts`), with counters in memory — the same
@@ -157,14 +190,14 @@ is how to check the setting is right in a hosted environment.
 - **Registration codes**: `POST /api/admin/registration-codes`, `GET /api/admin/registration-codes` (Admin).
 - **Team**: `GET /api/admin/users` (every registered user whose data hasn't been erased, removed ones included and flagged with `removedAt`, with email and account type), `PATCH /api/admin/users/:id/account-type`, `DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/erase-personal-data` (Admin — see Personal Data below). Removing sets `User.removedAt` rather than deleting the row, and in the same transaction revokes the user's refresh tokens and expires any outstanding password reset links; login, refresh and password reset requests then ignore the account. It's refused for the caller's own account and while the user has unfinished matches (same rule as taking someone off the ladder). An access token the removed user already holds stays valid until it expires (`JWT_ACCESS_TTL_MINUTES`), since `requireAuth` doesn't hit the database; `proposeMatch` checks the challenger's `removedAt` so that window can't be used to open a new match. A removed user's email stays taken, so they can't be re-invited or re-register with it. Account type (Player / Admin / Player and Admin) isn't stored on `User`; it's derived from `role` + `participatesInLadder` and changing it rewrites both, using the same mapping an invite applies. The server refuses to remove the caller's own admin access (which also guarantees an admin always remains) and to take a player off the ladder while they have unfinished matches. Points and `ustaRating` are kept across changes. A new role reaches the affected user's access token on their next refresh.
 - **Locations**: `GET /api/locations` (Player/Admin), `POST/PATCH/DELETE /api/admin/locations[/:id]` (Admin, soft delete).
-- **Weather**: `GET /api/locations/:id/forecast[?at=<ISO>]` (Player/Admin) — a 7-day outlook, or with `at` the hours around a match time. Shown on the propose/amend/counter forms.
+- **Weather**: `GET /api/locations/:id/forecast[?at=<ISO>]` (Player/Admin) — a 7-day outlook, or with `at` the hours around a match time. Shown on the propose/amend/counter forms, and on the match page until a score is reported.
 - **Travel**: `GET /api/matches/:id/travel-plan` (the caller's own journey only) — when to leave for a scheduled match, shown on the match page. `GET /api/travel/departure?addressId=&locationId=&at=` answers the same question for a match that doesn't exist yet, from one of the caller's own saved addresses — shown on the propose/amend/counter forms.
 - **Matches**: `GET /api/matches?filter=all|completed|pending`, `POST /api/matches` (propose — server rejects if either challenger or opponent has `participatesInLadder=false`), `GET /api/matches/:id`, `GET /api/matches/mine`, `POST /api/matches/:id/{counter,accept,decline}`, `PUT /api/matches/:id/travel-origin` (the caller's own, upcoming matches only), `GET /api/matches/:id/travel-plan` (the caller's own departure time), `GET /api/admin/matches/pending` (Admin), `POST /api/admin/matches/:id/cancel` (Admin — calls off a `NEGOTIATING` or `SCHEDULED` match on the players' behalf; soft, like every other removal here, so the row and its event thread survive as `CANCELLED`). Not gated on ladder participation, so a coach-admin can use it.
 - **Results**: `POST /api/matches/:id/result` (web), `GET`/`POST /api/results/token/:token` (public — token is the credential), `POST /api/admin/matches/:id/override-result` (Admin).
 
 ## Weather Forecast
 
-The match proposal forms show the forecast for the chosen location: a 7-day outlook, narrowing to the hours around the match (2 before, 3 after) once a date and time are picked.
+The match proposal forms show the forecast for the chosen location: a 7-day outlook, narrowing to the hours around the match (2 before, 3 after) once a date and time are picked. The match page shows the same hours for the match's own time and location while it is `NEGOTIATING` or `SCHEDULED`, and drops it once a score is reported (or the match is declined or cancelled). Indoor courts get no forecast anywhere.
 
 - **Providers** — both free and keyless, called server-side from `api/src/services/weatherService.ts` (geocoding via the shared `geocodingService.ts`, HTTP via `upstream.ts`), so the SPA never depends on their response shapes. Forecasts come from **Open-Meteo** (16-day horizon; the free tier is licensed for non-commercial use and requires the attribution link the UI shows — commercial use needs their paid API). Addresses are geocoded with OpenStreetMap's **Nominatim**, whose usage policy requires an identifying User-Agent, at most one request per second, and caching of results.
 - **Geocoding is lazy and persisted.** Location addresses are free text, so coordinates are looked up on the first forecast request and stored on the Location along with `geocodedAddress`, the address they came from. An edited address no longer matches and is looked up again; an address that can't be found is stored with null coordinates so it isn't retried on every request. Google-formatted addresses often name streets OSM doesn't know, so a miss retries with leading comma-separated parts dropped — town-level precision is plenty for both weather and a driving estimate. A player's saved address is the exception to the lazy pattern: it is looked up once while being saved and the address itself is never stored (see Saved Addresses below).

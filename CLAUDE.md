@@ -195,6 +195,13 @@ that follow-up migration has not been created yet, so active-code uniqueness is 
 at the DB level (`registrationCodeService.ts` assumes it is, via retry-on-conflict). Create it
 before relying on registration codes at any real scale.
 
+### Live updates
+
+`GET /api/live` is a server-sent event stream that tells open pages to refetch when a match or the
+ladder changes. Every Match state change must go through `commitMatchChange` in `matchService.ts`
+(which publishes after commit), or pages won't hear about it. Subscribers live in memory, so it
+shares the single-replica assumption above. Details in docs/architecture.md.
+
 ### Frontend structure
 
 React Router routes are guarded by `RequireAuth`/`RequireAdmin` components

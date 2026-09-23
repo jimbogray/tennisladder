@@ -28,8 +28,8 @@ function RainChance({ percent }: { percent: number | null }) {
 }
 
 /**
- * Forecast for the location being proposed: a week's outlook until a date and time are chosen,
- * then the hours around the match. Renders nothing until a location is picked, and nothing at all
+ * Forecast for a match's location: a week's outlook until a date and time are chosen, then the
+ * hours around the match. Used on the proposal forms and on the match page itself. Renders nothing until a location is picked, and nothing at all
  * for an indoor court, where the weather doesn't decide anything.
  *
  * `dateTime` is the picker's "YYYY-MM-DDTHH:mm" value, which is partial ("YYYY-MM-DDT") while
@@ -68,7 +68,13 @@ export function WeatherForecast({ locationId, dateTime }: { locationId: string; 
         <p className="weather-forecast-note">The weather forecast is unavailable right now.</p>
       ) : null}
       {data && data.status !== "AVAILABLE" ? (
-        <p className="weather-forecast-note">{UNAVAILABLE_MESSAGES[data.status]}</p>
+        <p className="weather-forecast-note">
+          {/* A match whose time has come and gone is outside the forecast too, but "check back
+              closer to the match" would be the wrong thing to tell its players. */}
+          {data.status === "OUT_OF_RANGE" && at && new Date(at).getTime() < Date.now()
+            ? "No forecast: the match time has passed."
+            : UNAVAILABLE_MESSAGES[data.status]}
+        </p>
       ) : null}
 
       {data?.status === "AVAILABLE" ? (

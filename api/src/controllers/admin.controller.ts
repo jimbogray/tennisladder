@@ -10,6 +10,7 @@ import {
 } from "../services/registrationCodeService.js";
 import { sendEmail } from "../services/emailService.js";
 import { ErasureBlockedError, erasePersonalData } from "../services/playerDataService.js";
+import { publishLadderChanged } from "../services/liveUpdates.js";
 import { renderInviteEmail } from "../emails/templates/invite.js";
 import { env } from "../config/env.js";
 
@@ -207,6 +208,8 @@ export const updateTeamMemberAccountType = asyncHandler(async (req: Request, res
     data: { role, participatesInLadder },
     select: teamMemberSelect,
   });
+  // Taking someone on or off the ladder adds or removes their row.
+  publishLadderChanged();
   res.json(toTeamMemberDto(updated));
 });
 
@@ -252,6 +255,7 @@ export const removeTeamMember = asyncHandler(async (req: Request, res: Response)
       data: { expiresAt: now },
     }),
   ]);
+  publishLadderChanged();
   res.status(204).send();
 });
 

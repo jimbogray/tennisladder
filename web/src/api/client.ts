@@ -37,7 +37,11 @@ function errorMessage(body: unknown): string | undefined {
   return error;
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+/**
+ * The request half of apiFetch, for the rare caller that needs the Response itself (a stream)
+ * rather than parsed JSON. Throws ApiError the same way on a non-2xx status.
+ */
+export async function apiRequest(path: string, options: RequestInit = {}): Promise<Response> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     credentials: "include", // sends the httpOnly refresh cookie on same-origin API calls
@@ -53,6 +57,11 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     throw new ApiError(res.status, errorMessage(body) ?? res.statusText);
   }
 
+  return res;
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await apiRequest(path, options);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
