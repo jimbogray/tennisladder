@@ -3,10 +3,17 @@ import { googleCalendarUrlForMatch } from "@tennisladder/shared";
 import { prisma } from "../config/prisma.js";
 import { env } from "../config/env.js";
 import { generateOpaqueToken, hashToken } from "./tokenService.js";
-import { sendEmail } from "./emailService.js";
-import { renderMatchConfirmedEmail } from "../emails/templates/matchConfirmed.js";
-import { formatMatchDateTimeForEmail } from "../emails/formatDateTime.js";
 import { publishLadderChanged, publishMatchChanged } from "./liveUpdates.js";
+import {
+  notifyChallengeProposed,
+  notifyMatchCalledOff,
+  notifyMatchConfirmed,
+  notifyProposalUpdated,
+  notifyResultDisputed,
+  notifyResultFinalized,
+  notifyResultSubmitted,
+  type IssuedResultToken,
+} from "./matchNotifications.js";
 
 /** Thrown for invalid match actions (bad turn, self-challenge, etc.). Callers surface as a 400. */
 export class MatchValidationError extends Error {}
@@ -71,17 +78,26 @@ export async function setTravelOrigin(matchId: string, actingUserId: string, add
 }
 
 /**
- * Runs a Match change and its MatchEvent in one transaction, then tells open pages about it.
- * Every state change goes through here, so no transition can be missed by the live updates.
- * Publishing waits for the commit: a page that refetches straight away must read the new state.
+ * Runs a Match change and its MatchEvent in one transaction, then tells open pages about it and
+ * emails whoever wasn't the one doing it. Every state change goes through here, so no transition
+ * can be missed by either.
+ *
+ * Both happen after the commit, deliberately: a page that refetches straight away must read the
+ * new state, and an email promising links a rolled-back transaction never stored would be worse
+ * than sending nothing. `notify` is expected not to throw — see matchNotifications.ts, which
+ * swallows and logs its own failures rather than turning a committed transition into an error.
  */
 async function commitMatchChange<T extends { id: string }>(
   change: (tx: Prisma.TransactionClient) => Promise<T>,
-  { ladderChanged = false }: { ladderChanged?: boolean } = {},
+  {
+    ladderChanged = false,
+    notify,
+  }: { ladderChanged?: boolean; notify?: (match: T) => Promise<void> } = {},
 ): Promise<T> {
   const match = await prisma.$transaction(change);
   publishMatchChanged(match.id);
   if (ladderChanged) publishLadderChanged();
+  if (notify) await notify(match);
   return match;
 }
 
@@ -153,7 +169,7 @@ export async function proposeMatch(input: ProposeMatchInput) {
     await applyTravelOrigin(tx, match.id, input.challengerId, input.travelOriginAddressId);
 
     return match;
-  });
+  }, { notify: (match) => notifyChallengeProposed(match.id) });
 }
 
 /** Loads a match and checks the acting user is one of its two players. */
@@ -228,7 +244,7 @@ export async function amendProposal(matchId: string, actingUserId: string, input
     await applyTravelOrigin(tx, matchId, actingUserId, input.travelOriginAddressId);
 
     return updated;
-  });
+  }, { notify: () => notifyProposalUpdated(matchId, actingUserId, "AMENDED") });
 }
 
 /**
@@ -273,14 +289,7 @@ export async function counterPropose(matchId: string, actingUserId: string, inpu
     await applyTravelOrigin(tx, matchId, actingUserId, input.travelOriginAddressId);
 
     return updated;
-  });
-}
-
-/** One "I won"/"I lost" link: the raw token that goes in the email, and who it speaks for. */
-interface IssuedResultToken {
-  userId: string;
-  outcome: ResultOutcome;
-  rawToken: string;
+  }, { notify: () => notifyProposalUpdated(matchId, actingUserId, "COUNTER_PROPOSED") });
 }
 
 /**
@@ -296,65 +305,6 @@ function issueResultTokens(challengerId: string, opponentId: string): IssuedResu
       rawToken: generateOpaqueToken(),
     })),
   );
-}
-
-/**
- * Emails both players their confirmation, each with their own pair of result links.
- *
- * Deliberately never throws: by the time this runs the match is accepted and committed, so a mail
- * failure mustn't turn a successful accept into an error for the player who accepted. Nothing is
- * lost either way — both players can still report the result on the site.
- */
-async function sendMatchConfirmedEmails(
-  match: { id: string; challengerId: string; opponentId: string; proposedLocationId: string },
-  scheduledDateTime: Date,
-  tokens: IssuedResultToken[],
-): Promise<void> {
-  try {
-    const [challenger, opponent, location] = await Promise.all([
-      prisma.user.findUniqueOrThrow({ where: { id: match.challengerId } }),
-      prisma.user.findUniqueOrThrow({ where: { id: match.opponentId } }),
-      prisma.location.findUniqueOrThrow({ where: { id: match.proposedLocationId } }),
-    ]);
-
-    const when = formatMatchDateTimeForEmail(scheduledDateTime);
-    // One event for both emails: the players are being invited to the same match, and the link
-    // carries a UTC instant, so each calendar shows it in its own owner's zone.
-    const calendarUrl = googleCalendarUrlForMatch({
-      challengerName: `${challenger.firstName} ${challenger.lastName}`,
-      opponentName: `${opponent.firstName} ${opponent.lastName}`,
-      scheduledDateTime,
-      locationName: location.name,
-      locationAddress: location.address,
-      matchUrl: `${env.webAppUrl}/matches/${match.id}`,
-    });
-    const linkFor = (userId: string, outcome: ResultOutcome) => {
-      const issued = tokens.find((token) => token.userId === userId && token.outcome === outcome);
-      if (!issued) throw new Error(`no ${outcome} result token was issued for user ${userId}`);
-      return `${env.webAppUrl}/results/confirm/${issued.rawToken}`;
-    };
-
-    for (const [recipient, other] of [
-      [challenger, opponent],
-      [opponent, challenger],
-    ] as const) {
-      const { subject, html } = renderMatchConfirmedEmail({
-        recipientFirstName: recipient.firstName,
-        opponentFirstName: other.firstName,
-        scheduledDateTime: when,
-        locationName: location.name,
-        calendarUrl,
-        wonResultUrl: linkFor(recipient.id, ResultOutcome.WON),
-        lostResultUrl: linkFor(recipient.id, ResultOutcome.LOST),
-      });
-      await sendEmail({ to: recipient.email, subject, html });
-    }
-  } catch (error) {
-    console.error(
-      `[matchService] match ${match.id} was accepted but its confirmation emails failed`,
-      error,
-    );
-  }
 }
 
 /**
@@ -412,9 +362,9 @@ export async function acceptMatch(
     return updated;
   });
 
-  // Only once the transaction has committed: an email promising links that a rolled-back
-  // transaction never stored would be worse than sending nothing at all.
-  await sendMatchConfirmedEmails(match, match.proposedDateTime, resultTokens);
+  // Not a `notify` option like the rest: the raw tokens only exist here, so the confirmation
+  // emails need something the committed match row can't give them.
+  await notifyMatchConfirmed(matchId, match.proposedDateTime, resultTokens);
 
   return updated;
 }
@@ -441,7 +391,7 @@ export async function declineMatch(matchId: string, actingUserId: string) {
     });
 
     return updated;
-  });
+  }, { notify: () => notifyMatchCalledOff(matchId, actingUserId, "DECLINED") });
 }
 
 /** The challenger pulls their own challenge before it's been agreed. Terminal. */
@@ -470,7 +420,7 @@ export async function withdrawMatch(matchId: string, actingUserId: string, comme
     });
 
     return updated;
-  });
+  }, { notify: () => notifyMatchCalledOff(matchId, actingUserId, "WITHDRAWN", comment) });
 }
 
 /** Calls off an arranged match. Either player may do this, with an optional reason. */
@@ -501,7 +451,7 @@ export async function cancelMatch(matchId: string, actingUserId: string, comment
     });
 
     return updated;
-  });
+  }, { notify: () => notifyMatchCalledOff(matchId, actingUserId, "CANCELLED", comment) });
 }
 
 /**
@@ -545,7 +495,7 @@ export async function adminCancelMatch(matchId: string, adminUserId: string, com
     });
 
     return updated;
-  });
+  }, { notify: () => notifyMatchCalledOff(matchId, adminUserId, "ADMIN_CANCELLED", comment) });
 }
 
 export type ResultOutcomeInput = "WON" | "LOST" | "TIED";
@@ -609,7 +559,7 @@ export async function proposeResult(
     });
 
     return updated;
-  });
+  }, { notify: () => notifyResultSubmitted(matchId, actingUserId, false) });
 }
 
 /** Reporter corrects their own score before the other player has answered. Turn stays put. */
@@ -645,7 +595,7 @@ export async function amendResult(
     });
 
     return updated;
-  });
+  }, { notify: () => notifyResultSubmitted(matchId, actingUserId, true) });
 }
 
 /**
@@ -696,7 +646,9 @@ export async function confirmResult(matchId: string, actingUserId: string) {
     });
 
     return updated;
-  }, { ladderChanged: true });
+    // The points each player is told they're on are read after this commits, so they're the ones
+    // that actually landed.
+  }, { ladderChanged: true, notify: () => notifyResultFinalized(matchId) });
 }
 
 /** The other player disagrees with the score. Lands on the admin dashboard for a manual override. */
@@ -726,7 +678,7 @@ export async function rejectResult(matchId: string, actingUserId: string, commen
     });
 
     return updated;
-  });
+  }, { notify: () => notifyResultDisputed(matchId, actingUserId, comment) });
 }
 
 export async function adminOverrideResult(
@@ -736,7 +688,8 @@ export async function adminOverrideResult(
   loserId: string,
 ) {
   // TODO: force status=COMPLETED, isAdminOverride=true, write ADMIN_OVERRIDE_RESULT event,
-  // calls applyLadderPoints, voids any unused MatchResultToken rows.
+  // calls applyLadderPoints, voids any unused MatchResultToken rows, and — like every other
+  // transition here — notifies both players with { notify: () => notifyResultFinalized(matchId) }.
   throw new Error("Not implemented");
 }
 

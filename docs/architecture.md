@@ -49,17 +49,46 @@ npm workspaces (not pnpm) — no extra tooling to install locally.
 
 ## Match State Machine
 
-| From | Event | To |
-|---|---|---|
-| — | Propose challenge | `NEGOTIATING` (email to opponent) |
-| `NEGOTIATING` | Accept | `SCHEDULED` (snapshot scheduledDateTime, confirmation emails, generate 4 result tokens) |
-| `NEGOTIATING` | Decline | `DECLINED` (terminal) |
-| `NEGOTIATING` | Counter-propose | `NEGOTIATING` (flips `awaitingResponseFromUserId`, loops indefinitely) |
-| `SCHEDULED` | Either player submits result (web or token) | `RESULT_PENDING` |
-| `RESULT_PENDING` | Second player submits matching result | `COMPLETED` (points applied transactionally, tokens voided) |
-| `RESULT_PENDING` | Second player submits conflicting result | `RESULT_DISPUTED` (surfaces on admin dashboard) |
-| any pre-`COMPLETED` state | Admin overrides | `COMPLETED` (`isAdminOverride=true`, bypasses confirmation) |
-| `NEGOTIATING` or `SCHEDULED` | Admin cancels | `CANCELLED` (terminal, `ADMIN_CANCELLED` event carries the admin and the optional reason) |
+| From | Event | To | Emails |
+|---|---|---|---|
+| — | Propose challenge | `NEGOTIATING` | opponent |
+| `NEGOTIATING` | Amend own proposal | `NEGOTIATING` (turn stays put) | the player who owes the reply |
+| `NEGOTIATING` | Counter-propose | `NEGOTIATING` (flips `awaitingResponseFromUserId`, loops indefinitely) | the other player |
+| `NEGOTIATING` | Accept | `SCHEDULED` (snapshot scheduledDateTime, generate 4 result tokens) | both, each with their own result links |
+| `NEGOTIATING` | Decline | `DECLINED` (terminal) | the challenger |
+| `NEGOTIATING` | Challenger withdraws | `WITHDRAWN` (terminal) | the opponent |
+| `SCHEDULED` | Either player cancels | `CANCELLED` (terminal) | the other player |
+| `SCHEDULED` | Either player submits result (web or token) | `RESULT_PENDING` | the other player, who has to answer it |
+| `RESULT_PENDING` | Reporter corrects their own score | `RESULT_PENDING` | the other player |
+| `RESULT_PENDING` | Second player submits matching result | `COMPLETED` (points applied transactionally, tokens voided) | both, with the points that moved |
+| `RESULT_PENDING` | Second player submits conflicting result | `RESULT_DISPUTED` (surfaces on admin dashboard) | whoever reported the score |
+| any pre-`COMPLETED` state | Admin overrides | `COMPLETED` (`isAdminOverride=true`, bypasses confirmation) | both (not yet implemented) |
+| `NEGOTIATING` or `SCHEDULED` | Admin cancels | `CANCELLED` (terminal, `ADMIN_CANCELLED` event carries the admin and the optional reason) | both, since neither of them did it |
+
+Plus two scheduled jobs that email without a transition: the match reminder
+(`MATCH_REMINDER_LEAD_MINUTES` before the start) and the stale-result nudge
+(`STALE_RESULT_REMINDER_HOURS` after it), both to both players.
+
+### Where the notifications live
+
+Every one of them is sent from `api/src/services/matchNotifications.ts`, through the same
+`commitMatchChange` seam the live updates use: the notification runs once the transition's
+transaction has committed, never inside it, since an email promising links a rolled-back
+transaction never stored is worse than no email, and no transition is worth failing over a mail
+provider being down. Nothing in that module throws for the same reason; failures are logged. One
+transition sends outside the seam — accepting a challenge, whose confirmation emails carry the raw
+result tokens, which exist only in that moment and not on the committed row.
+
+Two consequences worth keeping:
+
+- **Both result paths notify automatically.** The authenticated web flow and the public token flow
+  both go through `matchService`, so neither controller has to remember to send anything.
+- **The reminder jobs mark a match as reminded only once the emails have gone**, which is why the
+  two job-facing functions report success where the rest return nothing. Stamping first would burn
+  the single reminder a match gets on a send that never arrived.
+
+The negotiation emails re-embed the `MatchEvent` thread (rendered by `api/src/emails/matchThread.ts`),
+so a player answering from their inbox sees the same conversation the match page shows.
 
 **Points math**, applied once at transition into `COMPLETED`, inside a transaction with rows locked in a consistent order (by `id`) to avoid deadlocks:
 ```
@@ -347,9 +376,11 @@ Shared components: `CommentThread`, `FilterToggleBar`, `LadderTable`, `Negotiati
 /api/src/auth/{authConfig.ts, passwordUtils.ts, middleware.ts}
 /api/src/routes/{index,auth,players,locations,matches,results,admin}.routes.ts
 /api/src/controllers/*.controller.ts   (stub handlers, one per resource)
-/api/src/services/{matchService,emailService,tokenService,registrationCodeService}.ts
+/api/src/services/{matchService,matchNotifications,emailService,tokenService,registrationCodeService}.ts
 /api/src/jobs/{scheduler,matchReminderJob,staleResultReminderJob}.ts
-/api/src/emails/templates/*.ts         (challengeProposed, matchConfirmed, matchReminder, resultStale, resultFinalized, passwordReset, verifyEmail)
+/api/src/emails/templates/*.ts         (challengeProposed, proposalUpdated, matchConfirmed, matchCalledOff,
+                                        resultSubmitted, resultDisputed, resultFinalized, matchReminder,
+                                        resultStale, invite, passwordReset, verifyEmail)
 /api/src/middleware/errorHandler.ts
 
 /web/package.json, vite.config.ts, tsconfig.json, index.html, .env.example
