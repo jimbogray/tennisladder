@@ -5,6 +5,7 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../config/prisma.js";
 import { toSessionUserDto } from "../auth/sessionUser.js";
 import { exportPersonalData } from "../services/playerDataService.js";
+import { publishLadderChanged } from "../services/liveUpdates.js";
 
 /**
  * A copy of everything the app holds about the signed-in player, downloaded from their profile.
@@ -169,6 +170,8 @@ export const updateMe = asyncHandler(async (req: Request, res: Response) => {
       ...(avatarId !== undefined ? { avatarId: avatarId === "" ? null : avatarId } : {}),
     },
   });
+  // Name, rating and avatar are all on the ladder.
+  publishLadderChanged();
   res.json(toSessionUserDto(user));
 });
 

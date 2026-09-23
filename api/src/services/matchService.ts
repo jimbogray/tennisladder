@@ -6,6 +6,7 @@ import { generateOpaqueToken, hashToken } from "./tokenService.js";
 import { sendEmail } from "./emailService.js";
 import { renderMatchConfirmedEmail } from "../emails/templates/matchConfirmed.js";
 import { formatMatchDateTimeForEmail } from "../emails/formatDateTime.js";
+import { publishLadderChanged, publishMatchChanged } from "./liveUpdates.js";
 
 /** Thrown for invalid match actions (bad turn, self-challenge, etc.). Callers surface as a 400. */
 export class MatchValidationError extends Error {}
@@ -69,6 +70,21 @@ export async function setTravelOrigin(matchId: string, actingUserId: string, add
   return getTravelOrigin(matchId, actingUserId);
 }
 
+/**
+ * Runs a Match change and its MatchEvent in one transaction, then tells open pages about it.
+ * Every state change goes through here, so no transition can be missed by the live updates.
+ * Publishing waits for the commit: a page that refetches straight away must read the new state.
+ */
+async function commitMatchChange<T extends { id: string }>(
+  change: (tx: Prisma.TransactionClient) => Promise<T>,
+  { ladderChanged = false }: { ladderChanged?: boolean } = {},
+): Promise<T> {
+  const match = await prisma.$transaction(change);
+  publishMatchChanged(match.id);
+  if (ladderChanged) publishLadderChanged();
+  return match;
+}
+
 export interface ProposeMatchInput {
   challengerId: string;
   opponentId: string;
@@ -109,7 +125,7 @@ export async function proposeMatch(input: ProposeMatchInput) {
 
   // The opponent must respond first, so the turn starts with them. Record the opening PROPOSED
   // event in the same transaction as the Match so a challenge always has its negotiation history.
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const match = await tx.match.create({
       data: {
         challengerId: input.challengerId,
@@ -187,7 +203,7 @@ export async function amendProposal(matchId: string, actingUserId: string, input
   await assertLocationExists(input.proposedLocationId);
   await assertOwnAddress(actingUserId, input.travelOriginAddressId);
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -231,7 +247,7 @@ export async function counterPropose(matchId: string, actingUserId: string, inpu
   await assertLocationExists(input.proposedLocationId);
   await assertOwnAddress(actingUserId, input.travelOriginAddressId);
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -362,7 +378,7 @@ export async function acceptMatch(
 
   const resultTokens = issueResultTokens(match.challengerId, match.opponentId);
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const updated = await commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -414,7 +430,7 @@ export async function declineMatch(matchId: string, actingUserId: string) {
     throw new MatchValidationError("You can't decline your own proposal");
   }
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: { status: MatchStatus.DECLINED, lastActionAt: new Date() },
@@ -439,7 +455,7 @@ export async function withdrawMatch(matchId: string, actingUserId: string, comme
     throw new MatchValidationError("Only the challenger can withdraw this challenge");
   }
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -465,7 +481,7 @@ export async function cancelMatch(matchId: string, actingUserId: string, comment
     throw new MatchValidationError("Only a scheduled match can be cancelled");
   }
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -507,7 +523,7 @@ export async function adminCancelMatch(matchId: string, adminUserId: string, com
     throw new MatchValidationError("Only a match that's still being arranged or scheduled can be cancelled");
   }
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     // awaitingResponseFromUserId is left as it was — it's non-nullable, and every other terminal
     // transition here leaves it behind too, since status alone decides whether anyone owes a reply.
     const updated = await tx.match.update({
@@ -569,7 +585,7 @@ export async function proposeResult(
 
   const { winnerId, loserId, isTie } = resolveOutcome(match, actingUserId, outcome);
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: {
@@ -613,7 +629,7 @@ export async function amendResult(
 
   const { winnerId, loserId, isTie } = resolveOutcome(match, actingUserId, outcome);
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: { winnerId, loserId, isTie, lastActionAt: new Date() },
@@ -652,7 +668,8 @@ export async function confirmResult(matchId: string, actingUserId: string) {
 
   const { winnerId, loserId } = match;
 
-  return prisma.$transaction(async (tx) => {
+  // Even a tie changes the ladder: it goes on both players' records.
+  return commitMatchChange(async (tx) => {
     // A tie moves nobody: points are only ever awarded for a win.
     const pointsAwarded =
       winnerId && loserId ? await applyLadderPoints(tx, winnerId, loserId) : 0;
@@ -679,7 +696,7 @@ export async function confirmResult(matchId: string, actingUserId: string) {
     });
 
     return updated;
-  });
+  }, { ladderChanged: true });
 }
 
 /** The other player disagrees with the score. Lands on the admin dashboard for a manual override. */
@@ -693,7 +710,7 @@ export async function rejectResult(matchId: string, actingUserId: string, commen
     throw new MatchValidationError("You can't reject a score you reported yourself");
   }
 
-  return prisma.$transaction(async (tx) => {
+  return commitMatchChange(async (tx) => {
     const updated = await tx.match.update({
       where: { id: matchId },
       data: { status: MatchStatus.RESULT_DISPUTED, lastActionAt: new Date() },
