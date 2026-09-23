@@ -879,13 +879,18 @@ tbody tr.row-me td:first-child {
   flex: 0 1 9rem;
 }
 
-/* Weather forecast (match proposal forms) */
+/* Weather forecast (match proposal forms and the match page) */
 
 .weather-forecast {
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.75rem 0.9rem 0.6rem;
+}
+
+/* On the match page, where there's no form gap to space it from what follows. */
+.match-detail ~ .weather-forecast {
+  margin-bottom: 1.25rem;
 }
 
 .weather-forecast-heading {

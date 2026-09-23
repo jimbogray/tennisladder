@@ -26,10 +26,11 @@ import {
 import { fetchLocations } from "../api/locations.js";
 import { fetchMyAddresses, setTravelOrigin as saveTravelOrigin } from "../api/addresses.js";
 import { ApiError } from "../api/client.js";
-import { formatMatchDateTime } from "../lib/dateTime.js";
+import { formatMatchDateTime, toDateTimeLocal } from "../lib/dateTime.js";
 import { MatchStatusBadge } from "../components/MatchStatusBadge.js";
 import { ProposalForm } from "../components/ProposalForm.js";
 import { TravelPlan } from "../components/TravelPlan.js";
+import { WeatherForecast } from "../components/WeatherForecast.js";
 import {
   defaultTravelOriginId,
   toTravelOriginAddressId,
@@ -318,6 +319,16 @@ export function MatchDetailPage() {
           </>
         ) : null}
       </dl>
+
+      {/* Weather matters until the match has been played, which is as far as a score being
+          reported. A declined or cancelled match won't be played at all. Hidden while a new
+          proposal is being drafted, since that form shows the forecast for what it proposes. */}
+      {upcoming && mode !== "amend" && mode !== "counter" ? (
+        <WeatherForecast
+          locationId={data.proposedLocationId}
+          dateTime={toDateTimeLocal(data.scheduledDateTime ?? data.proposedDateTime)}
+        />
+      ) : null}
 
       {/* Only for a match that's actually arranged, and only for its players: the departure time
           gives away where someone lives. */}
